@@ -1,0 +1,42 @@
+export const repositories = [
+  { name: "payments-service", owner: "acme-fintech", language: "TypeScript", stars: 248, issues: 31, updated: "12 min ago", size: "18.4 MB", color: "blue" },
+  { name: "identity-gateway", owner: "acme-fintech", language: "Go", stars: 173, issues: 14, updated: "2 hours ago", size: "9.7 MB", color: "mint" },
+  { name: "customer-portal", owner: "acme-fintech", language: "React", stars: 96, issues: 22, updated: "Yesterday", size: "26.1 MB", color: "peach" },
+  { name: "ledger-core", owner: "acme-fintech", language: "Rust", stars: 321, issues: 8, updated: "3 days ago", size: "12.8 MB", color: "lavender" },
+];
+
+export const issues = [
+  { number: 1842, title: "Payment webhook intermittently times out", labels: ["bug", "payments", "priority-high"], author: "maya.chen", age: "2 days ago", comments: 18, status: "Open" },
+  { number: 1837, title: "User session expires unexpectedly", labels: ["bug", "authentication"], author: "jon.bell", age: "4 days ago", comments: 9, status: "Open" },
+  { number: 1819, title: "Duplicate events appear in billing pipeline", labels: ["bug", "billing"], author: "priya.s", age: "1 week ago", comments: 24, status: "Open" },
+  { number: 1804, title: "API returns stale user profile", labels: ["performance", "api"], author: "alex.k", age: "2 weeks ago", comments: 7, status: "Open" },
+];
+
+export const evidence = [
+  { id: "01", kind: "SOURCE FILE", name: "PaymentWebhookHandler.ts", locator: "Line 184", excerpt: "Webhook acknowledgement occurs after downstream processing.", time: "Modified 3 months ago", relation: "Directly supports the execution-order hypothesis", accent: "blue" },
+  { id: "02", kind: "COMMIT", name: "8f3a21c", locator: "payment/webhooks", excerpt: "Move payment provider call into webhook handler.", time: "Jan 18, 2025", relation: "Introduced the blocking call before acknowledgement", accent: "violet" },
+  { id: "03", kind: "RELATED ISSUE", name: "Issue #1742", locator: "Closed · 6 months ago", excerpt: "Webhook timeout reported under high provider latency.", time: "Sep 02, 2024", relation: "Documents the same failure under load", accent: "coral" },
+];
+
+export const investigationStages = [
+  ["01", "Understand issue", "Reading issue #1842 and 18 comments..."],
+  ["02", "Search repository", "Searching payment handlers..."],
+  ["03", "Trace relevant code", "Found PaymentWebhookHandler.ts..."],
+  ["04", "Investigate Git history", "Checking previous timeout fixes..."],
+  ["05", "Find related issues", "Comparing issue #1742 and PR #892..."],
+  ["06", "Form hypothesis", "Testing the acknowledgement-order theory..."],
+  ["07", "Verify evidence", "Triangulating code, commit, and issue evidence..."],
+  ["08", "Build investigation", "Preparing your evidence-backed brief..."],
+];
+
+export const codeLines = [
+  "export async function handlePaymentWebhook(req: Request) {",
+  "  const event = await verifySignature(req);",
+  "  const payment = await parsePaymentEvent(event);",
+  "",
+  "  await paymentProvider.fetchTransaction(payment.id);",
+  "  await billingService.reconcile(payment);",
+  "",
+  "  return acknowledgeWebhook({ received: true });",
+  "}",
+];
