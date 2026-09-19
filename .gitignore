@@ -12,6 +12,9 @@ dist
 dist-ssr
 .output
 .vinxi
+.output-aws
+dist-lambda
+dist-lambda.zip
 .tanstack/**
 .nitro
 *.local

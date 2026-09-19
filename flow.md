@@ -5,7 +5,7 @@
 ```mermaid
 flowchart LR
   Client[API client] --> ApiGateway[API Gateway HTTP API]
-  ApiGateway -. no integration yet .-> Lambda[Future Lambda handlers]
+  ApiGateway --> Lambda[RepoSherlock Lambda]
   Lambda --> DDB[(DynamoDB investigations)]
   Lambda --> S3[(S3 artifacts)]
   Lambda --> Secrets[Secrets Manager]
@@ -14,7 +14,7 @@ flowchart LR
   Lambda --> LambdaLogs[CloudWatch Lambda logs]
 ```
 
-The CloudFormation stack creates the boundary and least-privilege role now. Application integrations remain a later deployment step.
+The foundation stack creates the API boundary and the least-privilege execution role. The application stack (Packet 12) attaches the Lambda integration to the same API and puts CloudFront in front of it.
 
 ## Storage flow
 
@@ -199,3 +199,75 @@ flowchart LR
 ```
 
 `src/server.ts` resolves the composition root once per process. Missing configuration is a logged warning, never a crash.
+## Packet 11 failure and retry flow
+
+```mermaid
+flowchart TD
+  POST[POST /investigations] --> Persist[persist queued]
+  Persist --> Reply[202 queued]
+  Persist --> Dispatch[bounded async dispatch]
+  Dispatch -->|rejects| Retry[retry with backoff, max 3]
+  Retry -->|budget exhausted| LogFail[log async invocation failed]
+  Dispatch -->|resolves| Handle[worker.handle]
+  Handle -->|already claimed| Stop[no-op, no duplicate run]
+  Handle -->|still queued| Claim[claimQueued]
+  Claim --> Run[runInvestigation]
+  Run -->|completed with unique evidence| Complete[persist completed]
+  Run -->|timeout or error| Failed[persist failed or timeout with failureCode]
+```
+
+Every external boundary has a controlled outcome: GitHub rate limit (`GITHUB_RATE_LIMITED`), GitHub unavailable (`GITHUB_REQUEST_FAILED`), repository not indexed (`REPOSITORY_NOT_INDEXED`), empty repository (zero files/issues and still `completed`), Bedrock error (`BEDROCK_ERROR`), investigation timeout (`INVESTIGATION_TIMEOUT`), DynamoDB/S3 failures (`StorageError` surfaced as a controlled API 500), and frontend network failure (`ApiClientError` with `NETWORK_ERROR`). Agent bounds always terminate the run: exhausted tool or token budgets, an unresponsive Bedrock call, malformed model JSON, and unresolved or duplicated evidence ids all produce a validated `failed` result instead of an infinite loop or fabricated evidence.
+
+## Packet 12 deployment and request flow
+
+```mermaid
+flowchart TD
+  Dev[Developer] -->|scripts/deploy.ps1| Foundation[Foundation stack]
+  Foundation --> Buckets[Artifacts + frontend buckets]
+  Foundation --> Table[InvestigationsTable]
+  Foundation --> Role[Lambda execution role]
+  Foundation --> HttpApi[HTTP API + stage]
+  Dev -->|build:aws| Package[dist-lambda.zip]
+  Package -->|s3 cp| Buckets
+  Foundation --> Secret[Secrets Manager GitHub token]
+  Buckets --> App[Application stack]
+  HttpApi --> App
+  App --> Lambda[RepoSherlock Lambda]
+  App --> CloudFront[CloudFront distribution]
+  CloudFront -->|default| HttpApi
+  CloudFront -->|/assets/*| Buckets
+  App --> Cognito[Cognito user pool]
+  App --> Budget[Monthly cost budget]
+```
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant CF as CloudFront
+  participant APIGW as API Gateway
+  participant L as Lambda
+  participant SM as Secrets Manager
+  participant Bedrock
+  User->>CF: GET https://<dist>/
+  CF->>APIGW: default behavior (SSR + /api)
+  APIGW->>L: AWS_PROXY $default
+  L->>L: render frontend / handle API
+  User->>CF: POST /api/investigations
+  CF->>APIGW: forward (AllViewerExceptHost)
+  APIGW->>L: invoke
+  L-->>User: 202 investigationId (queued)
+  L->>L: self-invoke (InvocationType Event, marker)
+  L->>SM: resolve token at deploy time (env)
+  L->>Bedrock: Converse (bounded tools)
+  L->>L: evidence validation + persist
+  User->>CF: GET /api/investigations/:id
+  CF->>APIGW: forward
+  APIGW->>L: invoke
+  L-->>User: completed result with evidence
+```
+
+The deployment is two CloudFormation stacks. The foundation stack owns the data, secret, IAM role, HTTP API and log groups; the application stack consumes its outputs and adds the Lambda, the API integration, CloudFront, Cognito and the budget. Data resources are `Retain`-protected, so deleting a stack never destroys the buckets, table or secret.
+
+At runtime CloudFront is the single public entry point. The default behavior proxies `/api/*` and SSR pages to API Gateway → Lambda; `/assets/*` and the static root files are served directly from the S3 frontend bucket through an Origin Access Control. Because the browser calls the relative `/api` base on the CloudFront domain, requests stay same-origin and no wildcard CORS header is emitted.
+
+Long investigations run asynchronously: the API returns `202` with an `investigationId`, then the Lambda self-invokes itself with `InvocationType: "Event"` and the `reposherlock.async` marker. A client that retries the same event cannot start a second run because claiming is conditional on `queued`. The Lambda timeout (300 s) leaves generous headroom over the bounded agent timeout (30 s).

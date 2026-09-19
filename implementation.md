@@ -16,7 +16,7 @@ Zod owns request and response validation. The investigation service uses an in-m
 - Retained CloudWatch log groups with 30-day retention.
 - A retained Secrets Manager secret shell for the future GitHub integration. No token is placed in IaC.
 
-No Lambda functions or user authentication resources are deployed by the foundation stack. The application uses Bedrock through the runtime `Converse` API when deployed with credentials; Cognito + GitHub OAuth remains the approved authentication boundary and is configured manually as documented below.
+No Lambda functions or user authentication resources are deployed by the foundation stack; the Packet 12 application stack (`infrastructure/cloudformation/app.yaml`) adds the function, the API integration and Cognito. The application uses Bedrock through the runtime `Converse` API when deployed with credentials; Cognito + GitHub OAuth remains the approved authentication boundary.
 
 ## Storage layer
 
@@ -116,3 +116,102 @@ The worker logs `investigation_started`, `investigation_stage_updated`, `investi
 ### Not implemented
 
 Impact and fix-plan sections are not part of the validated result contract. The UI renders honest empty states and the golden test asserts that no `impact` or `fixPlan` field is fabricated.
+## Packet 11 testing, security and hardening
+
+The suite runs entirely in process with mocks only at the external boundaries (GitHub, DynamoDB/S3, Bedrock), so it needs no AWS, network or credentials and is deterministic. `npm test` runs 16 files / 84 tests.
+
+| Area                  | File                            | Covers                                                                                              |
+| --------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------- |
+| API validation        | `tests/api.test.ts`             | request schema, 202 queued response, status vs result reads, stable error envelope                  |
+| Storage               | `tests/storage.test.ts`         | DynamoDB investigations lifecycle, pagination, S3 put/get                                           |
+| GitHub                | `tests/github.test.ts`          | real-shaped responses, pagination, bounded retry                                                    |
+| Retrieval             | `tests/retrieval.test.ts`       | chunking, embedding determinism/normalization, hybrid ranking, repository isolation                 |
+| Agent                 | `tests/engine.test.ts`          | tool input validation, provenance, bounded orchestration, structured output                         |
+| Agent safety          | `tests/agent-safety.test.ts`    | iteration/tool/chunk/token/timeout bounds, tool failure, empty retrieval, invalid/duplicate evidence |
+| Prompt injection      | `tests/prompt-injection.test.ts` | untrusted-data framing, tool allowlist, fabrication rejection, log hygiene                          |
+| Integration           | `tests/integration.test.ts`     | API->DynamoDB, API->GitHub, ingestion->S3/metadata, retrieval->chunks, agent->Bedrock, worker->DB   |
+| Golden investigation  | `tests/golden/e2e.test.ts`      | the complete golden path and expected answer                                                        |
+| Frontend flow         | `tests/frontend-flow.test.ts`   | real `apiClient` + view models: login, repository, issue, investigate, progress, result, WHY, code   |
+| Resilience / failures | `tests/resilience.test.ts`      | GitHub rate limit/unavailable, not indexed, empty repo, Bedrock error, timeout, DB/S3, network      |
+| Security              | `tests/security.test.ts`        | committed-secret scan and CloudFormation least-privilege assertions (fallback for gitleaks/trivy)   |
+
+### Bounded asynchronous dispatch
+
+`src/api/worker.ts` retries asynchronous dispatch with a small bounded backoff (`maxAsyncAttempts`, default 3, clamped to `[1, 5]`) and logs `investigation_async_retry` and `investigation_async_invocation_failed`. Re-delivery is safe because `claimQueued` only claims work that is still `queued`, so a retry can never start a second run. `tests/resilience.test.ts` asserts both the retry and the no-duplicate guarantee.
+
+## Packet 12 AWS production / demo deployment
+
+### Target architecture
+
+| Layer         | Service                                                            |
+| ------------- | ------------------------------------------------------------------ |
+| Frontend      | S3 (static assets) + CloudFront                                    |
+| API           | API Gateway (HTTP API, `$default` route) → Lambda                  |
+| Data          | DynamoDB (`InvestigationsTable`) + S3 (`ArtifactsBucket`)          |
+| AI            | Amazon Bedrock Runtime (`Converse`)                                |
+| Authentication| Existing GitHub session boundary; Cognito User Pool provisioned as the approved configuration |
+| Observability | CloudWatch Logs + CloudWatch metrics                               |
+
+### Infrastructure as code
+
+All deployable infrastructure is CloudFormation under `infrastructure/cloudformation`:
+
+- `template.yaml` — foundation stack: artifacts bucket, frontend bucket, DynamoDB table, GitHub secret, Lambda execution role, API Gateway HTTP API + stage, and both CloudWatch log groups.
+- `app.yaml` — application stack: the RepoSherlock Lambda, the API Gateway Lambda integration and `$default` route, the CloudFront distribution (API + S3 origins), the frontend bucket policy (OAC), the Cognito user pool/client/domain, and the monthly budget.
+
+Both templates take `ProjectName` and `EnvironmentName`, derive every resource name from them, and emit outputs consumed by the next stage (`ApiId`, `ArtifactsBucketName`, `FrontendBucketName`, `InvestigationsTableName`, `LambdaExecutionRoleArn`, `FrontendUrl`, `DistributionId`, `ApiEndpoint`, `FunctionName`). The region is always the deploy region (`ap-south-1` by default) and is never hardcoded in a resource ARN. `scripts/validate-templates.py` and `cfn-lint` validate both templates; `cfn-lint` exits clean.
+
+Deployment order is enforced by the scripts, not by manual steps:
+
+1. Deploy the foundation stack.
+2. Read its outputs (buckets, table, role ARN, API id).
+3. Store the GitHub token in Secrets Manager (never committed).
+4. Build and upload the Lambda package to the artifacts bucket.
+5. Deploy the application stack with the foundation outputs.
+6. Sync frontend assets to the frontend bucket and invalidate CloudFront.
+
+### Lambda build and packaging
+
+The default Vite/Nitro preset (`cloudflare-module`) is untouched. `vite.config.aws.ts` runs Nitro with the `aws-lambda` preset into `.output-aws`, and `scripts/build-lambda.mjs` bundles `src/aws/lambda-handler.ts` with esbuild into `dist-lambda/index.mjs` and copies the Nitro server under `dist-lambda/server/`. The package is zipped and uploaded to `s3://<artifacts-bucket>/deploy/<revision>-<timestamp>/lambda.zip`.
+
+`src/aws/lambda-handler.ts` is the single Lambda entry point. An `ApiGatewayV2`/ALB HTTP event is delegated to the Nitro server bundle; a payload carrying `marker: "reposherlock.async"` runs the asynchronous worker or indexer directly.
+
+### Asynchronous investigation on Lambda
+
+In-process `setTimeout` cannot survive a frozen Lambda. `src/api/composition.ts` gains an `AsyncDispatcher`; when `REPOSHERLOCK_ASYNC_FUNCTION_NAME` (or `AWS_LAMBDA_FUNCTION_NAME`) is set, the worker and the indexer self-invoke the function with `InvocationType: "Event"` through `@aws-sdk/client-lambda`, passing the marked payload. Without those variables (local development and tests) the work still runs in-process, so behaviour is unchanged. `enqueue`/`startIndex` are awaited so the freeze cannot drop an invocation that was scheduled but not yet sent. Re-delivery is safe because `claimQueued` claims only still-`queued` work, so a retry cannot start a second run.
+
+### Lambda configuration
+
+| Setting      | Value             | Rationale                                                       |
+| ------------ | ----------------- | -------------------------------------------------------------- |
+| Runtime      | `nodejs22.x`      | Supported runtime matching the Node 20+ target of the bundle.   |
+| Architecture | `arm64`           | Lower cost for the demo workload.                              |
+| Memory       | `1024 MB`         | Headroom for ingestion and the bounded agent.                  |
+| Timeout      | `300 s`           | Bounded agent run is 30 s; timeout is not set close to it.     |
+| Handler      | `index.handler`   | esbuild bundle root.                                           |
+
+Environment: `REPOSHERLOCK_TABLE_NAME`, `REPOSHERLOCK_BUCKET_NAME`, `REPOSHERLOCK_BEDROCK_MODEL_ID`, `REPOSHERLOCK_BEDROCK_MAX_TOKENS`, `REPOSHERLOCK_ASYNC_FUNCTION_NAME`, `REPOSHERLOCK_LOG_LEVEL`, `REPOSHERLOCK_GITHUB_TOKEN`. The token is injected as `{{resolve:secretsmanager:...}}` at deploy time; no secret is committed to the repository or baked into the build.
+
+### API, CORS and routing
+
+The HTTP API uses a single `$default` route with an `AWS_PROXY` integration to the Lambda and a 30 s integration timeout. CloudFront's default cache behavior targets the API origin (so `/api/*` and SSR pages reach the Lambda through API Gateway) and forwards all viewer headers except `Host`. `/assets/*`, `/favicon.ico` and `/robots.txt` are served from the S3 frontend bucket with CachingOptimized, so the client bundle never hits the Lambda. The frontend uses the relative `/api` base, so no cross-origin configuration is required and the router never emits a wildcard `Access-Control-Allow-Origin`.
+
+### S3, DynamoDB and Bedrock
+
+- Both buckets are AES256-encrypted with full public-access blocking; the frontend bucket is readable only by the distribution through an Origin Access Control.
+- The DynamoDB schema is unchanged: the foundation stack deploys the existing table and GSI exactly as before.
+- Bedrock uses the runtime `Converse` API in `ap-south-1` with the configured model id and `maxTokens <= 1200`. The IAM policy is scoped to `bedrock:InvokeModel` on the foundation-model ARN list parameter; the runtime model id and the IAM foundation-model ARN remain separate and the model id is never hardcoded into the ARN.
+
+### Observability and cost
+
+`ApiAccessLogGroup` (`/aws/apigateway/...`) and `LambdaLogGroup` (`/aws/lambda/<project>-<env>`, 30-day retention) capture API and Lambda logs. Structured logs carry `investigationId`, `repositoryId`, `issueNumber`, `stage`, `toolName`, `durationMs` and `success`, and never log tokens, credentials or secrets. A monthly `COST` budget (default 20 USD, optional email) alerts at 80% actual spend; there is no always-on compute beyond the request-driven Lambda.
+
+### Commands
+
+```powershell
+npm.cmd run build:aws           # build the Lambda package
+npm.cmd run deploy              # deploy foundation + app + frontend (scripts/deploy.ps1)
+npm.cmd run rollback            # redeploy the previous Lambda package (scripts/rollback.ps1)
+python scripts/validate-templates.py
+cfn-lint infrastructure/cloudformation/template.yaml infrastructure/cloudformation/app.yaml
+```

@@ -1,3 +1,4 @@
+import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { createBedrockModel, loadBedrockConfig } from "../investigation/bedrock";
 import { ingestRepository } from "../github/ingestion";
 import { createGitHubClient } from "../github/client";
@@ -10,7 +11,11 @@ import { loadConfig } from "./config";
 import { createLogger, type StructuredLogger } from "./logger";
 import { createRepositoryResourceService } from "./resources";
 import { createApiRouter } from "./router";
-import { createInvestigationWorker } from "./worker";
+import {
+  createInvestigationWorker,
+  type InvestigationWorker,
+  type InvestigationWorkerEvent,
+} from "./worker";
 
 export type ApiRequestHandler = (request: Request) => Promise<Response | undefined>;
 
@@ -23,20 +28,65 @@ export type CompositionOverrides = {
   model?: BedrockModel;
   logger?: StructuredLogger;
   userId?: string;
+  /** Injected for tests; the runtime creates its own Lambda client by default. */
+  lambdaClient?: Pick<LambdaClient, "send">;
+};
+
+/** Work that the deployed Lambda runs outside the request/response cycle. */
+export type AsyncWorkEvent =
+  | { kind: "investigation"; investigationId: string }
+  | { kind: "index"; repositoryId: string; userId: string };
+
+export type AsyncDispatcher = (event: AsyncWorkEvent) => Promise<void>;
+
+/** Marker that distinguishes an asynchronous self-invocation from an HTTP event. */
+export const asyncEventMarker = "reposherlock.async";
+
+/**
+ * Dispatches work to the deployed Lambda with `InvocationType: Event`, so the
+ * HTTP handler can return immediately and Lambda cannot freeze the work before
+ * it runs. A client may be injected for tests.
+ */
+export function createLambdaDispatcher(
+  functionName: string,
+  client?: Pick<LambdaClient, "send">,
+): AsyncDispatcher {
+  const lambda = client ?? new LambdaClient({});
+  return async (event) => {
+    await lambda.send(
+      new InvokeCommand({
+        FunctionName: functionName,
+        InvocationType: "Event",
+        Payload: new TextEncoder().encode(JSON.stringify({ marker: asyncEventMarker, ...event })),
+      }),
+    );
+  };
+}
+
+export type CompositionRuntime = {
+  storage: RepositoryStore;
+  artifacts: ArtifactRepository;
+  github: GitHubClient;
+  model: BedrockModel;
+  logger: StructuredLogger;
+  userId: string;
+  worker: InvestigationWorker;
+  /** Runs ingestion in-process; used by the async Lambda path and local runs. */
+  runIndex: (event: { repositoryId: string; userId: string }) => Promise<void>;
+  /** Requests indexing, asynchronously when a Lambda dispatch target is configured. */
+  startIndex: (repositoryId: string) => Promise<void>;
 };
 
 /**
- * Application composition root.
- *
- * It only *wires* the approved components (storage, GitHub, retrieval, worker,
- * agent, Bedrock, resource adapter) into the existing fetch router. It does not
- * add a service, a queue, or a second persistence layer. Returns `undefined`
- * when required configuration is absent so callers can keep a safe fallback.
+ * Builds the approved components (storage, artifacts, GitHub, retrieval, worker,
+ * Bedrock, resource adapter). This is a wiring function, not new architecture:
+ * the HTTP router and the asynchronous Lambda entry share the same components.
+ * Returns `undefined` when required configuration is absent.
  */
-export function createConfiguredApiRouter(
+export function createCompositionRuntime(
   env: CompositionEnv = {},
   overrides: CompositionOverrides = {},
-): ApiRequestHandler | undefined {
+): CompositionRuntime | undefined {
   const logger = overrides.logger ?? createLogger(loadConfig(env));
   const userId = overrides.userId ?? env["REPOSHERLOCK_USER_ID"] ?? "local-user";
 
@@ -67,44 +117,111 @@ export function createConfiguredApiRouter(
     return undefined;
   }
 
-  const worker = createInvestigationWorker({ storage, artifacts, github, model, logger });
+  // Lambda sets AWS_LAMBDA_FUNCTION_NAME automatically; the explicit override is
+  // used for local testing and for aliases/versions.
+  const asyncFunctionName =
+    env["REPOSHERLOCK_ASYNC_FUNCTION_NAME"] ?? env["AWS_LAMBDA_FUNCTION_NAME"];
+  const dispatch = asyncFunctionName
+    ? createLambdaDispatcher(asyncFunctionName, overrides.lambdaClient)
+    : undefined;
+
+  const runIndex = async (event: { repositoryId: string; userId: string }) => {
+    const repository = await storage.repositories.get(event.repositoryId);
+    if (!repository) return;
+    try {
+      await ingestRepository(
+        github,
+        storage,
+        artifacts,
+        {
+          userId: event.userId,
+          owner: repository.owner,
+          name: repository.name,
+          repositoryId: event.repositoryId,
+        },
+        { logger },
+      );
+    } catch (error) {
+      // A failed index must be visible to the polling client instead of
+      // leaving the repository stuck in `running` forever.
+      await storage.repositories.updateIndexingStatus(
+        event.repositoryId,
+        "failed",
+        new Date().toISOString(),
+      );
+      logger.error("repository_indexing_failed", {
+        repositoryId: event.repositoryId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  const worker = createInvestigationWorker({
+    storage,
+    artifacts,
+    github,
+    model,
+    logger,
+    ...(dispatch
+      ? {
+          invokeAsync: (event: InvestigationWorkerEvent) =>
+            dispatch({ kind: "investigation", investigationId: event.investigationId }),
+        }
+      : {}),
+  });
+
+  const startIndex = async (repositoryId: string) => {
+    try {
+      if (dispatch) await dispatch({ kind: "index", repositoryId, userId });
+      else await runIndex({ repositoryId, userId });
+    } catch (error) {
+      logger.error("repository_index_start_failed", {
+        repositoryId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  return {
+    storage,
+    artifacts,
+    github,
+    model,
+    logger,
+    userId,
+    worker,
+    runIndex,
+    startIndex,
+  };
+}
+
+/**
+ * Application composition root for the HTTP router.
+ *
+ * It only *wires* the approved components into the existing fetch router. It
+ * does not add a service, a queue, or a second persistence layer. Returns
+ * `undefined` when required configuration is absent so callers can keep a safe
+ * fallback.
+ */
+export function createConfiguredApiRouter(
+  env: CompositionEnv = {},
+  overrides: CompositionOverrides = {},
+): ApiRequestHandler | undefined {
+  const runtime = createCompositionRuntime(env, overrides);
+  if (!runtime) return undefined;
 
   const resources = createRepositoryResourceService({
-    storage,
-    userId,
-    github,
-    startIndex: async (repositoryId) => {
-      const repository = await storage.repositories.get(repositoryId);
-      if (!repository) return;
-      try {
-        await ingestRepository(
-          github,
-          storage,
-          artifacts,
-          { userId, owner: repository.owner, name: repository.name, repositoryId },
-          { logger },
-        );
-      } catch (error) {
-        // A failed index must be visible to the polling client instead of
-        // leaving the repository stuck in `running` forever.
-        await storage.repositories.updateIndexingStatus(
-          repositoryId,
-          "failed",
-          new Date().toISOString(),
-        );
-        logger.error("repository_indexing_failed", {
-          repositoryId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    },
+    storage: runtime.storage,
+    userId: runtime.userId,
+    github: runtime.github,
+    startIndex: runtime.startIndex,
   });
 
   return createApiRouter({
     config: loadConfig(env),
-    logger,
-    storage,
-    worker,
+    logger: runtime.logger,
+    storage: runtime.storage,
+    worker: runtime.worker,
     resources,
   });
 }

@@ -10,6 +10,8 @@
 
 ## Deploy the foundation
 
+This section documents the foundation-only path. For the full demo deployment (foundation + application + frontend) run `scripts/deploy.ps1` as described under "Packet 12 deploy the demo to AWS".
+
 From the repository root, set the profile and region:
 
 ```powershell
@@ -34,9 +36,9 @@ The stack creates these resources and outputs their physical identifiers:
 
 - `ArtifactsBucket`: encrypted, private, versioned S3 bucket.
 - `InvestigationsTable`: on-demand single-table DynamoDB store using `PK/SK` and `GSI1`, with point-in-time recovery.
-- `LambdaExecutionRole`: future Lambda role with scoped data, secret, logging, and Bedrock permissions.
+- `LambdaExecutionRole`: Lambda role with scoped data, secret, logging, and Bedrock permissions.
 - `ApiGatewayCloudWatchRole`: API Gateway service role for access logs.
-- `ApiGatewayAccount` and `ApiGatewayStage`: HTTP API front door with no application integration yet.
+- `ApiGatewayAccount` and `ApiGatewayStage`: HTTP API front door; the application stack adds the Lambda integration.
 - `ApiAccessLogGroup` and `LambdaLogGroup`: CloudWatch logs retained for 30 days.
 - `GitHubSecret`: empty secret shell retained during deletion. Add its value manually; never pass a token as a CloudFormation parameter.
 
@@ -318,4 +320,170 @@ Filter the log group for the investigation and confirm each line carries `invest
 { $.message = "investigation_tool_call" && $.success = false }
 { $.message = "investigation_bedrock_call" }
 { $.message = "investigation_completed" || $.message = "investigation_failed" }
+```
+## Test and security commands
+
+Run every command from the repository root.
+
+| Purpose                     | Command                                                                     |
+| --------------------------- | --------------------------------------------------------------------------- |
+| Full suite                  | `npm.cmd test`                                                              |
+| Watch mode                  | `npx vitest`                                                                |
+| Golden investigation only   | `npx vitest run tests/golden`                                               |
+| Agent safety and injection  | `npx vitest run tests/agent-safety.test.ts tests/prompt-injection.test.ts`  |
+| Resilience and failures     | `npx vitest run tests/resilience.test.ts`                                   |
+| Integration boundaries      | `npx vitest run tests/integration.test.ts`                                  |
+| Frontend golden flow        | `npx vitest run tests/frontend-flow.test.ts`                                |
+| Security fallback scan      | `npx vitest run tests/security.test.ts`                                     |
+| Type check                  | `npx tsc --noEmit -p tsconfig.json`                                         |
+| Lint                        | `npm.cmd run lint`                                                          |
+| Production dependency audit | `npm.cmd audit --omit=dev`                                                  |
+
+Expected: 16 test files and 84 tests pass, `tsc` exits 0, and `npm audit --omit=dev` reports 0 production vulnerabilities. Run the golden command three times to confirm the investigation succeeds repeatedly; it is deterministic and needs no manual intervention.
+
+`gitleaks` and `trivy` are not installed in this environment, so `tests/security.test.ts` provides a deterministic fallback: it fails if a `.env`/`*.pem`/`*.key` file is committed or a recognizable credential pattern appears, and it checks the CloudFormation least-privilege posture (public access blocked, no wildcard IAM actions, Bedrock scoped to `BedrockModelArns`). CI (`.github/workflows/validation.yml`) still runs gitleaks and `npm audit --audit-level=high`.
+
+## Packet 12 deploy the demo to AWS
+
+### Prerequisites
+
+- AWS CLI v2 configured with an account that can create CloudFormation stacks, Lambda, IAM, S3, DynamoDB, API Gateway, CloudFront, Cognito, Secrets Manager, CloudWatch and Budgets resources.
+- Node.js 20 or newer, `python` (for the template validator) and `cfn-lint` (optional).
+- A GitHub token with read access to the golden repository. Never commit it.
+- Region: `ap-south-1` (all commands below assume it; change every occurrence together if you deploy elsewhere).
+
+### Environment
+
+```powershell
+$env:AWS_REGION = "ap-south-1"
+$env:REPOSHERLOCK_GITHUB_TOKEN = "ghp_your_token"   # kept only in this shell
+```
+
+### Build
+
+```powershell
+npm.cmd install
+python scripts/validate-templates.py
+cfn-lint infrastructure/cloudformation/template.yaml infrastructure/cloudformation/app.yaml
+npm.cmd run build:aws
+```
+
+`npm.cmd run build:aws` produces `dist-lambda/index.mjs`, `dist-lambda/server/` and `.output-aws/public/`. These directories are gitignored and are never committed.
+
+### Deploy
+
+```powershell
+npm.cmd run deploy -- -Region ap-south-1 -EnvironmentName dev -BudgetEmail you@example.com
+```
+
+The script performs the full ordered deployment and prints the frontend URL, API URL, region, Lambda name, table, artifacts bucket, frontend bucket and CloudFront distribution id. It:
+
+1. Deploys the foundation stack `reposherlock-dev-foundation`.
+2. Stores the token in Secrets Manager (`reposherlock/github`).
+3. Builds and uploads `lambda.zip` to the artifacts bucket.
+4. Deploys the application stack `reposherlock-dev-app`.
+5. Syncs `.output-aws/public/assets` to the frontend bucket and invalidates CloudFront.
+
+The bash equivalent is `./scripts/deploy.sh` with the same arguments.
+
+### Rollback
+
+```powershell
+npm.cmd run rollback -- -Region ap-south-1 -EnvironmentName dev
+```
+
+It re-reads the live stack parameters and redeploys the application stack with the previous Lambda package key, then invalidates CloudFront. The bash equivalent is `./scripts/rollback.sh`. Rolling back infrastructure uses `aws cloudformation` on the two stacks; data resources are `Retain`-protected and are not deleted.
+
+### Deployment facts to record
+
+| Item             | Where to read it                                             |
+| ---------------- | ------------------------------------------------------------ |
+| Frontend URL     | Application stack output `FrontendUrl` (CloudFront domain).   |
+| API URL          | Application stack output `ApiEndpoint`.                       |
+| Region           | `ap-south-1`.                                                 |
+| Lambda           | Application stack output `FunctionName`.                      |
+| Table            | Foundation stack output `InvestigationsTableName`.            |
+| Artifacts bucket | Foundation stack output `ArtifactsBucketName`.                |
+| Frontend bucket  | Foundation stack output `FrontendBucketName`.                 |
+| Log groups       | `/aws/lambda/reposherlock-dev` and `/aws/apigateway/...`.     |
+
+## Manual AWS verification checklist
+
+Run these in the AWS Console (region `ap-south-1`) after deployment. Every box must be checked before the demo is considered ready.
+
+### CloudFormation
+
+- [ ] `reposherlock-dev-foundation` shows `CREATE_COMPLETE` (or `UPDATE_COMPLETE`).
+- [ ] `reposherlock-dev-app` shows `CREATE_COMPLETE` (or `UPDATE_COMPLETE`).
+- [ ] Foundation outputs include `ArtifactsBucketName`, `FrontendBucketName`, `InvestigationsTableName`, `LambdaExecutionRoleArn`, `ApiId`, `Region`.
+- [ ] Application outputs include `FrontendUrl`, `DistributionId`, `ApiEndpoint`, `FunctionName`, `UserPoolId`, `UserPoolClientId`.
+
+### Lambda
+
+- [ ] `reposherlock-dev` exists, runtime `nodejs22.x`, architecture `arm64`, memory `1024 MB`, timeout `300 s`.
+- [ ] Handler is `index.handler`.
+- [ ] Environment contains `REPOSHERLOCK_TABLE_NAME`, `REPOSHERLOCK_BUCKET_NAME`, `REPOSHERLOCK_BEDROCK_MODEL_ID`, `REPOSHERLOCK_BEDROCK_MAX_TOKENS`, `REPOSHERLOCK_ASYNC_FUNCTION_NAME`, `REPOSHERLOCK_LOG_LEVEL`, `REPOSHERLOCK_GITHUB_TOKEN`.
+- [ ] No secret value is visible in the repository or in the build output.
+- [ ] The execution role policy is scoped: S3 under `repositories/*`, DynamoDB on the table and its index, `secretsmanager:GetSecretValue` on the one secret, `bedrock:InvokeModel` on the model ARN parameter, and `lambda:InvokeFunction` on the function itself.
+
+### API Gateway
+
+- [ ] The HTTP API contains a `$default` route integrated with the Lambda (`AWS_PROXY`, 30 s timeout).
+- [ ] The stage has access logging enabled to the API access log group.
+- [ ] `curl https://<api-endpoint>/api/health` returns `{"status":"ok","service":"reposherlock-api","version":"v1"}`.
+
+### CloudFront and S3
+
+- [ ] The distribution is deployed and its default behavior targets the API origin.
+- [ ] `/assets/*`, `/favicon.ico` and `/robots.txt` behaviors target the frontend S3 origin.
+- [ ] The frontend bucket blocks all public access and has an Origin Access Control policy.
+- [ ] Opening `<FrontendUrl>` loads the application over HTTPS.
+- [ ] Opening `<FrontendUrl>/api/health` returns the health JSON (same-origin `/api` proxying works).
+
+### DynamoDB
+
+- [ ] `reposherlock-dev` table is `ACTIVE`, billing `PAY_PER_REQUEST`, with the existing `PK`/`SK` keys and `GSI1` index.
+- [ ] After the smoke test, investigation items exist under the table.
+
+### Secrets Manager
+
+- [ ] `reposherlock/github` exists and contains `{"token":"..."}`.
+- [ ] `git status` shows no committed token; no `.env`, `*.pem` or `*.key` files are tracked.
+
+### Bedrock
+
+- [ ] In **Amazon Bedrock → Model access** (region `ap-south-1`) the configured model is granted.
+- [ ] The Lambda role grants `bedrock:InvokeModel` on the model ARN parameter (never a hardcoded model id).
+- [ ] A CloudWatch `investigation_bedrock_call` log entry records `maxTokens=1200` and `success=true`.
+
+### CloudWatch
+
+- [ ] `/aws/lambda/reposherlock-dev` receives logs and shows `investigation_stage_updated`, `investigation_tool_call`, `investigation_bedrock_call`, `investigation_completed`.
+- [ ] Entries carry `investigationId`, `repositoryId`, `issueNumber` and `stage`.
+- [ ] No log entry contains a GitHub token, AWS credential or other secret.
+
+### Budget
+
+- [ ] A monthly `COST` budget exists for `reposherlock-dev` (default 20 USD) with an 80% actual-spend email notification.
+
+### Smoke test (run three times)
+
+1. [ ] Open `<FrontendUrl>`.
+2. [ ] Log in through the configured GitHub session.
+3. [ ] Select the golden repository (`acme/payments-service`) and index it.
+4. [ ] List issues and select #1842 `Payment webhook intermittently times out`.
+5. [ ] Click **Investigate** and confirm the status transitions `queued → running → completed`.
+6. [ ] Confirm the result appears without manual intervention.
+7. [ ] Open **WHY** and confirm it shows real evidence.
+8. [ ] Confirm the code/file, history, impact (where implemented) and fix plan sections render.
+9. [ ] Repeat from step 1 two more times; all three runs complete successfully.
+
+### Failure triage
+
+If the golden path fails, trace in this order and fix only the smallest failing component: Frontend → API Gateway → Lambda → GitHub → S3/DynamoDB → retrieval → agent → Bedrock → evidence validation → DynamoDB → API → Frontend.
+
+```powershell
+aws logs tail /aws/lambda/reposherlock-dev --follow --region ap-south-1
+aws logs filter-log-events --log-group-name /aws/lambda/reposherlock-dev --filter-pattern investigationId --region ap-south-1
+aws cloudformation describe-stack-events --stack-name reposherlock-dev-app --region ap-south-1
 ```

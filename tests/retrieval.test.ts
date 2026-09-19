@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   chunkSourceFile,
   detectLanguage,
+  generateEmbedding,
   indexSourceFile,
   isIndexableSourceFile,
   primarySourceWeight,
@@ -140,5 +141,30 @@ describe("repository retrieval", () => {
     expect(
       await retrieve("repo-a", "payment", deps.storage, deps.artifacts, { similarityThreshold: 1 }),
     ).toEqual([]);
+  });
+});
+
+describe("embedding pipeline", () => {
+  it("produces deterministic, unit-normalized vectors", () => {
+    const first = generateEmbedding("payment webhook timeout provider");
+    const second = generateEmbedding("payment webhook timeout provider");
+    expect(first).toEqual(second);
+    expect(first).toHaveLength(64);
+    const magnitude = Math.sqrt(first.reduce((sum, value) => sum + value * value, 0));
+    expect(magnitude).toBeCloseTo(1, 6);
+    expect(generateEmbedding("unrelated session refresh token")).not.toEqual(first);
+  });
+
+  it("returns a zero vector when there are no indexable tokens", () => {
+    expect(generateEmbedding("   !!  ").every((value) => value === 0)).toBe(true);
+  });
+
+  it("rejects an overlap that is not smaller than the chunk size", () => {
+    expect(() =>
+      chunkSourceFile(
+        { repositoryId: "repo-a", filePath: "src/app.ts", commitSha: "sha-a", content: "x" },
+        { chunkSize: 2, overlap: 2 },
+      ),
+    ).toThrow(/overlap/);
   });
 });

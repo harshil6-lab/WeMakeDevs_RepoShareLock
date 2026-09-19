@@ -63,9 +63,11 @@ export function createInvestigationService(
           updatedAt: investigation.updatedAt,
         });
       investigations.set(investigation.investigationId, investigation);
-      // Dispatch is deliberately fire-and-forget so HTTP latency is independent
-      // of the future ingestion and investigation pipeline.
-      void Promise.resolve(worker.enqueue(investigation)).catch(() => undefined);
+      // The dispatch call itself is awaited so a serverless runtime cannot
+      // freeze before the asynchronous invoke is accepted. The investigation
+      // still runs outside this request, so HTTP latency stays independent of
+      // the agent pipeline.
+      await Promise.resolve(worker.enqueue(investigation)).catch(() => undefined);
       return investigation;
     },
     async get(investigationId) {

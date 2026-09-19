@@ -5,8 +5,8 @@
 - Use AWS CloudFormation because it is available through the AWS Console and CLI without introducing a new local IaC runtime.
 - Use `ap-south-1` as the documented default deployment region; all resources are created in the selected stack region.
 - Use generated physical names by default to avoid collisions. An optional S3 bucket name and configurable secret name are exposed as parameters.
-- Use an HTTP API as an unintegrated API Gateway front door. No application behavior is duplicated in infrastructure.
-- Use an execution role instead of Lambda functions until application deployment is approved.
+- Use an HTTP API as the API Gateway front door. The application stack adds the Lambda integration in a later deployment; no application behavior is duplicated in infrastructure.
+- Define the execution role in the foundation stack and attach the Lambda function to that pre-scoped role in the application stack.
 - Restrict Bedrock access to `bedrock:InvokeModel` and the model ARN list supplied at deployment time.
 - Use the approved Cognito User Pool federation with GitHub OAuth; the integration layer receives an already-authenticated GitHub access token and does not implement custom sessions.
 - Retain S3, DynamoDB, Secrets Manager, and log data during stack deletion by default to reduce accidental data loss.
@@ -75,3 +75,26 @@
 - Include resolved evidence excerpts in the synthesis prompt. The synthesizer previously saw only evidence ids, so it could not describe the evidence it was required to cite.
 - Log `toolName`/`phase`, `durationMs` and `success` for every tool and Bedrock call. Token budget, iteration, tool-call and retrieved-chunk limits are unchanged.
 - Do not add impact or fix-plan fields. The approved result contract does not contain them, so the UI shows honest empty states and the golden test asserts absence instead of fabricating sections.
+## Packet 11 hardening decisions
+
+- Keep tests in process and mock only the external boundaries (GitHub, DynamoDB/S3, Bedrock). CI has no AWS, network or credentials, so live calls would make the suite flaky and expensive; `manual-setup.md` documents the deployed verification.
+- Treat model output as untrusted. Prompt-injection containment is proven structurally: repository text is always wrapped in `<repository-data>` under a system prompt that declares it untrusted data, and the orchestrator (not the model) chooses tool calls. `tests/prompt-injection.test.ts` asserts the framing, the approved-tool allowlist, rejection of injection-driven fabrication and log hygiene.
+- Add a bounded async dispatch retry (default 3 attempts, max 5) instead of new infrastructure. Re-delivery is safe because claiming is conditional on `queued`, so retries cannot create duplicate investigations.
+- Validate "no fabricated evidence" end to end: claims must cite ids the tools returned, `buildEvidence` resolves them against the ledger, and unresolved or duplicated ids fail the investigation instead of being persisted.
+- Ship a deterministic in-repo secret and IaC scan (`tests/security.test.ts`) because the gitleaks and trivy binaries are not installed locally. Both scanners stay in CI (`.github/workflows/validation.yml`), and `npm audit --omit=dev` reports 0 production vulnerabilities.
+- Use the existing API-client plus view-model boundary for the frontend flow test. No browser automation framework is installed, so rather than adding a heavy dependency the test drives the real `apiClient` over a fetch shim into the real router and asserts the view models end to end.
+
+## Packet 12 deployment decisions
+
+- Deploy with two CloudFormation stacks (foundation, then application) rather than one. The split keeps the retained data resources out of reach of routine application redeploys and lets the Lambda package be uploaded before the function is created, which removes the "code does not exist yet" ordering problem.
+- Keep the default Vite/Nitro preset untouched and add `vite.config.aws.ts`. The repository must still build with the existing configuration for every other target; the AWS build is additive.
+- Package the Lambda from a single esbuild bundle plus the Nitro server output instead of introducing a container image or a bundler plugin. It keeps the deployment dependency-free and the artifact small.
+- Self-invoke the Lambda for asynchronous work with `InvocationType: "Event"` and a magic `marker`, instead of adding SQS or Step Functions. This preserves the existing worker architecture, needs only the scoped `lambda:InvokeFunction` permission, and keeps local development running in-process when the function name is unset.
+- Await `enqueue`/`startIndex` before returning. Lambda freezes the execution environment after the handler resolves, so a fire-and-forget dispatch could be dropped; awaiting guarantees the invocation is sent while the same `claimQueued` guard still prevents duplicates.
+- Serve the frontend from CloudFront with an Origin Access Control and route the default behavior to the API origin. One origin handles SSR and `/api`, so the browser keeps using the relative `/api` base and no wildcard CORS is needed.
+- Inject the GitHub token through the Secrets Manager dynamic reference `{{resolve:secretsmanager:...}}` at deploy time. No token is committed, and the secret is never written into the build.
+- Set the Lambda timeout (300 s) well above the bounded agent timeout (30 s) rather than tuning it close to the expected run, so cold starts and ingestion cannot trip the limit.
+- Keep the runtime Bedrock model id and the IAM foundation-model ARN separate. The ARN stays a deployment parameter scoped to `bedrock:InvokeModel`; the model id is never hardcoded into the ARN.
+- Add a monthly cost budget and rely on request-driven Lambda plus on-demand DynamoDB instead of any always-on infrastructure.
+- Provide `deploy`/`rollback` in both PowerShell and bash. The scripts read stack outputs, so the deployment order and resource names are not manual steps and a redeploy is repeatable.
+- Do not enforce Cognito authentication in the API itself for the hackathon demo; the existing GitHub session boundary is the active login, and Cognito is provisioned as the approved authentication configuration for a later step. Changing enforcement would alter the existing API architecture.

@@ -12,7 +12,7 @@ import type { Investigation } from "./schemas";
 
 export type InvestigationWorkerEvent = { investigationId: string };
 export type InvestigationWorker = {
-  enqueue: (investigation: Investigation) => void;
+  enqueue: (investigation: Investigation) => Promise<void> | void;
   handle: (event: InvestigationWorkerEvent) => Promise<void>;
 };
 
@@ -22,6 +22,7 @@ export type InvestigationWorkerOptions = {
   github: GitHubClient;
   model: BedrockModel;
   invokeAsync?: (event: InvestigationWorkerEvent) => Promise<void> | void;
+  maxAsyncAttempts?: number;
   logger?: StructuredLogger;
   agent?: (
     input: Parameters<typeof runInvestigation>[0],
@@ -98,6 +99,7 @@ export function createInvestigationWorker(
   options: InvestigationWorkerOptions,
 ): InvestigationWorker {
   const agent = options.agent ?? runInvestigation;
+  const maxAsyncAttempts = Math.min(Math.max(options.maxAsyncAttempts ?? 3, 1), 5);
   const worker: InvestigationWorker = {
     enqueue(investigation) {
       const invokeAsync =
@@ -106,14 +108,34 @@ export function createInvestigationWorker(
           const handle: (nextEvent: InvestigationWorkerEvent) => Promise<void> = worker.handle;
           setTimeout(() => void handle(event), 0);
         });
-      void Promise.resolve(invokeAsync({ investigationId: investigation.investigationId })).catch(
-        (error: unknown) => {
+      // Dispatch is retried with a small bounded backoff because asynchronous
+      // invocation can fail transiently. Re-delivery is safe: the worker only
+      // claims work that is still queued, so a retry can never start a second
+      // run for the same investigation.
+      const dispatch = async (attempt: number): Promise<void> => {
+        try {
+          await invokeAsync({ investigationId: investigation.investigationId });
+        } catch (error: unknown) {
+          if (attempt < maxAsyncAttempts) {
+            options.logger?.warn("investigation_async_retry", {
+              investigationId: investigation.investigationId,
+              attempt,
+              maxAsyncAttempts,
+            });
+            await new Promise((resolve) => setTimeout(resolve, attempt * 50));
+            return dispatch(attempt + 1);
+          }
           options.logger?.error("investigation_async_invocation_failed", {
             investigationId: investigation.investigationId,
+            attempts: attempt,
             error: error instanceof Error ? error.message : String(error),
           });
-        },
-      );
+        }
+      };
+      // Returned so the caller can await the dispatch itself. On Lambda the HTTP
+      // response must not be returned before the asynchronous invoke completes,
+      // or the execution environment freezes mid-request.
+      return dispatch(1);
     },
     async handle(event) {
       const record = await options.storage.investigations.get(event.investigationId);

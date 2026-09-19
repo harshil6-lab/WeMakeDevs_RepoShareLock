@@ -8,6 +8,9 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
+    "build:aws": "node scripts/build-lambda.mjs",
+    "deploy": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1",
+    "rollback": "powershell -ExecutionPolicy Bypass -File scripts/rollback.ps1",
     "lint": "eslint .",
     "test": "vitest run",
     "format": "prettier --write ."
@@ -18,6 +21,7 @@
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1135.0",
     "@aws-sdk/client-dynamodb": "^3.1135.0",
+    "@aws-sdk/client-lambda": "^3.1135.0",
     "@aws-sdk/client-s3": "^3.1135.0",
     "@aws-sdk/lib-dynamodb": "^3.1135.0",
     "@hookform/resolvers": "^5.2.2",
