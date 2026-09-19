@@ -52,7 +52,9 @@ export function createRepositoryResourceService(
       const repository = await options.storage.repositories.get(repositoryId);
       if (!repository) throw new Error("Repository was not found");
       if (!options.startIndex) throw new Error("Repository indexing is not configured");
-      void options.startIndex(repositoryId);
+      // Awaited so a serverless runtime cannot freeze before the asynchronous
+      // indexing invoke is accepted. Ingestion itself runs outside this request.
+      await options.startIndex(repositoryId);
       return { repositoryId, status: "running" };
     },
     async getIndexStatus(repositoryId) {

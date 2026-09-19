@@ -22,9 +22,15 @@ Parameters:
     Default: ""
     AllowedPattern: "^$|^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
     Description: Optional globally unique S3 bucket name. Leave empty to let CloudFormation generate one.
+  FrontendBucketName:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    Description: Optional globally unique S3 bucket for the built frontend assets. Leave empty to let CloudFormation generate one.
 
 Conditions:
   HasArtifactsBucketName: !Not [!Equals [!Ref ArtifactsBucketName, ""]]
+  HasFrontendBucketName: !Not [!Equals [!Ref FrontendBucketName, ""]]
 
 Resources:
   ArtifactsBucket:
@@ -52,6 +58,27 @@ Resources:
             Status: Enabled
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: 7
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !If [HasFrontendBucketName, !Ref FrontendBucketName, !Ref AWS::NoValue]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -113,6 +140,7 @@ Resources:
   ApiAccessLogGroup:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       RetentionInDays: 30
       Tags:
@@ -124,6 +152,7 @@ Resources:
   LambdaLogGroup:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: !Sub /aws/lambda/${ProjectName}-${EnvironmentName}
       RetentionInDays: 30
@@ -189,6 +218,10 @@ Resources:
                 Effect: Allow
                 Action: bedrock:InvokeModel
                 Resource: !Ref BedrockModelArns
+              - Sid: AsyncSelfInvocation
+                Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ProjectName}-${EnvironmentName}
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -247,3 +280,9 @@ Outputs:
     Value: !Ref ApiGatewayAccount
   ApiEndpoint:
     Value: !Sub https://${ApiGatewayAccount}.execute-api.${AWS::Region}.${AWS::URLSuffix}
+  FrontendBucketName:
+    Value: !Ref FrontendBucket
+    Description: S3 bucket for the built frontend assets, served by CloudFront.
+  Region:
+    Value: !Ref AWS::Region
+    Description: Region this foundation stack was deployed into.

@@ -1,33 +1,33 @@
 export const tableKeys = {
-  user: (userId: string) => ({ pk: `USER#${userId}`, sk: "PROFILE" }),
-  repository: (repositoryId: string) => ({ pk: `REPOSITORY#${repositoryId}`, sk: "METADATA" }),
+  user: (userId: string) => ({ PK: `USER#${userId}`, SK: "PROFILE" }),
+  repository: (repositoryId: string) => ({ PK: `REPOSITORY#${repositoryId}`, SK: "METADATA" }),
   repositoryForUser: (userId: string, repositoryId: string) => ({
-    pk: `USER#${userId}`,
-    sk: `REPOSITORY#${repositoryId}`,
+    PK: `USER#${userId}`,
+    SK: `REPOSITORY#${repositoryId}`,
   }),
   chunk: (repositoryId: string, chunkId: string) => ({
-    pk: `REPOSITORY#${repositoryId}`,
-    sk: `CHUNK#${chunkId}`,
+    PK: `REPOSITORY#${repositoryId}`,
+    SK: `CHUNK#${chunkId}`,
   }),
   file: (repositoryId: string, filePath: string) => ({
-    pk: `REPOSITORY#${repositoryId}`,
-    sk: `FILE#${filePath}`,
+    PK: `REPOSITORY#${repositoryId}`,
+    SK: `FILE#${filePath}`,
   }),
   commit: (repositoryId: string, commitSha: string) => ({
-    pk: `REPOSITORY#${repositoryId}`,
-    sk: `COMMIT#${commitSha}`,
+    PK: `REPOSITORY#${repositoryId}`,
+    SK: `COMMIT#${commitSha}`,
   }),
   investigation: (investigationId: string) => ({
-    pk: `INVESTIGATION#${investigationId}`,
-    sk: "METADATA",
+    PK: `INVESTIGATION#${investigationId}`,
+    SK: "METADATA",
   }),
   evidence: (investigationId: string, evidenceId: string) => ({
-    pk: `INVESTIGATION#${investigationId}`,
-    sk: `EVIDENCE#${evidenceId}`,
+    PK: `INVESTIGATION#${investigationId}`,
+    SK: `EVIDENCE#${evidenceId}`,
   }),
   issue: (repositoryId: string, issueNumber: number) => ({
-    pk: `REPOSITORY#${repositoryId}`,
-    sk: `ISSUE#${issueNumber}`,
+    PK: `REPOSITORY#${repositoryId}`,
+    SK: `ISSUE#${issueNumber}`,
   }),
 };
 
