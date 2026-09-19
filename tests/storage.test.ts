@@ -19,12 +19,12 @@ function fakeClient(responses: Record<string, unknown> = {}) {
 
 describe("storage keys", () => {
   it("builds stable entity and relationship keys", () => {
-    expect(tableKeys.user("u1")).toEqual({ pk: "USER#u1", sk: "PROFILE" });
+    expect(tableKeys.user("u1")).toEqual({ PK: "USER#u1", SK: "PROFILE" });
     expect(tableKeys.evidence("inv1", "ev1")).toEqual({
-      pk: "INVESTIGATION#inv1",
-      sk: "EVIDENCE#ev1",
+      PK: "INVESTIGATION#inv1",
+      SK: "EVIDENCE#ev1",
     });
-    expect(tableKeys.issue("repo1", 42)).toEqual({ pk: "REPOSITORY#repo1", sk: "ISSUE#42" });
+    expect(tableKeys.issue("repo1", 42)).toEqual({ PK: "REPOSITORY#repo1", SK: "ISSUE#42" });
   });
 
   it("builds repository snapshot and raw artifact keys", () => {

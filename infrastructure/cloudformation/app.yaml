@@ -1,0 +1,232 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  RepoSherlock application stack. Deploys the bounded investigation Lambda and
+  connects it to the foundation HTTP API. The frontend is served separately for
+  a temporary CDN-free deployment. Deploy the foundation stack (template.yaml)
+  first and upload the Lambda package before creating or updating this stack.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: reposherlock
+    AllowedPattern: "^[a-z][a-z0-9-]{2,30}$"
+  EnvironmentName:
+    Type: String
+    Default: dev
+    AllowedPattern: "^[a-z][a-z0-9-]{1,15}$"
+  ApiId:
+    Type: String
+    Description: Foundation stack output ApiId.
+  ArtifactsBucketName:
+    Type: String
+    Description: Foundation stack output ArtifactsBucketName; holds the Lambda package.
+  FrontendBaseUrl:
+    Type: String
+    Default: http://localhost:5173
+    Description: Temporary frontend URL used for Cognito callback/logout configuration.
+  InvestigationsTableName:
+    Type: String
+    Description: Foundation stack output InvestigationsTableName.
+  LambdaRoleArn:
+    Type: String
+    Description: Foundation stack output LambdaExecutionRoleArn.
+  LambdaCodeS3Key:
+    Type: String
+    Description: S3 key of the uploaded Lambda package, for example deploy/<version>/lambda.zip.
+  LambdaRuntime:
+    Type: String
+    Default: nodejs22.x
+    AllowedValues:
+      - nodejs22.x
+      - nodejs24.x
+  LambdaArchitecture:
+    Type: String
+    Default: arm64
+    AllowedValues:
+      - arm64
+      - x86_64
+  LambdaMemoryMb:
+    Type: Number
+    Default: 1024
+    MinValue: 256
+    MaxValue: 10240
+  LambdaTimeoutSeconds:
+    Type: Number
+    Default: 300
+    MinValue: 30
+    MaxValue: 900
+    Description: >-
+      The bounded agent gives a single investigation 30 seconds; this timeout
+      leaves generous headroom for ingestion and cold starts without sitting
+      close to the expected execution time.
+  BedrockModelId:
+    Type: String
+    Default: nvidia.nemotron-nano-12b-v2
+    Description: Runtime Bedrock model id. This is intentionally separate from the IAM foundation-model ARN.
+  BedrockMaxTokens:
+    Type: String
+    Default: "1200"
+  GitHubSecretName:
+    Type: String
+    Default: reposherlock/github
+    AllowedPattern: "^[a-zA-Z0-9/_+=.@-]{1,512}$"
+    Description: >-
+      Secrets Manager secret holding {"githubToken": "<github token>"}. Populate it
+      before deploying this stack; the value is never committed.
+  LogLevel:
+    Type: String
+    Default: info
+    AllowedValues: [debug, info, warn, error]
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 20
+    Description: Monthly AWS cost budget for the demo, in USD.
+  BudgetEmail:
+    Type: String
+    Default: ""
+    Description: Optional email address for budget alerts. Leave empty to skip the budget.
+
+Conditions:
+  HasBudgetEmail: !Not [!Equals [!Ref BudgetEmail, ""]]
+
+Resources:
+  ReposherlockFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProjectName}-${EnvironmentName}
+      Description: RepoSherlock SSR, API, ingestion and bounded investigation runtime.
+      Runtime: !Ref LambdaRuntime
+      Architectures:
+        - !Ref LambdaArchitecture
+      Handler: index.handler
+      Role: !Ref LambdaRoleArn
+      MemorySize: !Ref LambdaMemoryMb
+      Timeout: !Ref LambdaTimeoutSeconds
+      Code:
+        S3Bucket: !Ref ArtifactsBucketName
+        S3Key: !Ref LambdaCodeS3Key
+      Environment:
+        Variables:
+          NODE_ENV: production
+          REPOSHERLOCK_SERVICE_NAME: reposherlock-api
+          REPOSHERLOCK_LOG_LEVEL: !Ref LogLevel
+          REPOSHERLOCK_TABLE_NAME: !Ref InvestigationsTableName
+          REPOSHERLOCK_BUCKET_NAME: !Ref ArtifactsBucketName
+          REPOSHERLOCK_BEDROCK_MODEL_ID: !Ref BedrockModelId
+          REPOSHERLOCK_BEDROCK_MAX_TOKENS: !Ref BedrockMaxTokens
+          REPOSHERLOCK_ASYNC_FUNCTION_NAME: !Sub ${ProjectName}-${EnvironmentName}
+          REPOSHERLOCK_GITHUB_TOKEN: !Sub "{{resolve:secretsmanager:${GitHubSecretName}:SecretString:githubToken}}"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiId
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ReposherlockFunction.Arn
+      PayloadFormatVersion: "1.0"
+      TimeoutInMillis: 30000
+
+  ApiDefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiId
+      RouteKey: $default
+      Target: !Sub integrations/${ApiIntegration}
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ReposherlockFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiId}/*
+
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub ${ProjectName}-${EnvironmentName}
+      AutoVerifiedAttributes:
+        - email
+      UsernameConfiguration:
+        CaseSensitive: false
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+
+  CognitoUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub ${ProjectName}-${EnvironmentName}-${AWS::AccountId}
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ClientName: !Sub ${ProjectName}-${EnvironmentName}-web
+      GenerateSecret: false
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      CallbackURLs:
+        - !Sub ${FrontendBaseUrl}/api/auth/session
+      LogoutURLs:
+        - !Sub ${FrontendBaseUrl}/
+      SupportedIdentityProviders:
+        - COGNITO
+
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Condition: HasBudgetEmail
+    Properties:
+      Budget:
+        BudgetName: !Sub ${ProjectName}-${EnvironmentName}-monthly
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetUsd
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref BudgetEmail
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint for the deployed application.
+    Value: !Sub https://${ApiId}.execute-api.${AWS::Region}.${AWS::URLSuffix}
+  FunctionName:
+    Description: Deployed Lambda function name.
+    Value: !Ref ReposherlockFunction
+  FunctionArn:
+    Description: Deployed Lambda function ARN.
+    Value: !GetAtt ReposherlockFunction.Arn
+  Region:
+    Description: Region this stack was deployed into.
+    Value: !Ref AWS::Region
+  UserPoolId:
+    Description: Cognito user pool id for the approved authentication configuration.
+    Value: !Ref CognitoUserPool
+  UserPoolClientId:
+    Description: Cognito user pool client id.
+    Value: !Ref CognitoUserPoolClient
+  UserPoolDomain:
+    Description: Cognito hosted UI domain for the approved authentication configuration.
+    Value: !Sub https://${CognitoUserPoolDomain}.auth.${AWS::Region}.amazoncognito.com

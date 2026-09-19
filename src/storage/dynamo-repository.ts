@@ -42,8 +42,59 @@ const decodeToken = (token?: string) =>
     : undefined;
 const pageLimit = (limit = 25) => Math.min(Math.max(limit, 1), 100);
 
+type DynamoErrorMetadata = {
+  httpStatusCode?: number;
+  requestId?: string;
+  extendedRequestId?: string;
+  attempts?: number;
+  totalRetryDelay?: number;
+};
+
+/** Reads the SDK error metadata without touching request parameters or item data. */
+function readDynamoErrorMetadata(cause: unknown): DynamoErrorMetadata {
+  if (!cause || typeof cause !== "object") return {};
+  const metadata = (cause as { $metadata?: unknown }).$metadata;
+  if (!metadata || typeof metadata !== "object") return {};
+  const source = metadata as Record<string, unknown>;
+  const result: DynamoErrorMetadata = {};
+  const httpStatusCode = source["httpStatusCode"];
+  if (typeof httpStatusCode === "number") result.httpStatusCode = httpStatusCode;
+  const requestId = source["requestId"];
+  if (typeof requestId === "string") result.requestId = requestId;
+  const extendedRequestId = source["extendedRequestId"];
+  if (typeof extendedRequestId === "string") result.extendedRequestId = extendedRequestId;
+  const attempts = source["attempts"];
+  if (typeof attempts === "number") result.attempts = attempts;
+  const totalRetryDelay = source["totalRetryDelay"];
+  if (typeof totalRetryDelay === "number") result.totalRetryDelay = totalRetryDelay;
+  return result;
+}
+
+/**
+ * Logs the underlying DynamoDB failure before it is wrapped. Only the error
+ * name, message, and SDK metadata (status code, request ids, retry counters) are
+ * recorded; request parameters, item contents, and credentials are never logged.
+ */
+function logDynamoFailure(operation: string, cause: unknown): void {
+  const error = cause instanceof Error ? cause : undefined;
+  console.error(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: "error",
+      message: "storage_operation_failed",
+      operation,
+      cause: {
+        name: error?.name ?? typeof cause,
+        message: error?.message ?? String(cause),
+      },
+      metadata: readDynamoErrorMetadata(cause),
+    }),
+  );
+}
+
 function withError<T>(operation: string, action: () => Promise<T>): Promise<T> {
   return action().catch((cause) => {
+    logDynamoFailure(operation, cause);
     throw new StorageError(
       operation.includes("read") || operation.includes("list")
         ? "STORAGE_READ_FAILED"
@@ -295,8 +346,8 @@ export function createDynamoRepository(options: DynamoRepositoryOptions): Reposi
               Key: tableKeys.investigation(investigationId),
               ConditionExpression: "#status = :running",
               UpdateExpression:
-                "SET #status = :status, error = :error, failureCode = :failureCode, completedAt = :completedAt, durationMs = :durationMs, updatedAt = :updatedAt",
-              ExpressionAttributeNames: { "#status": "status" },
+                "SET #status = :status, #error = :error, failureCode = :failureCode, completedAt = :completedAt, durationMs = :durationMs, updatedAt = :updatedAt",
+              ExpressionAttributeNames: { "#status": "status", "#error": "error" },
               ExpressionAttributeValues: {
                 ":running": "running",
                 ":status": status,

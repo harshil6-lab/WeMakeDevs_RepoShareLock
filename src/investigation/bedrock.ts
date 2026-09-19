@@ -31,15 +31,23 @@ export function createBedrockModel(options: BedrockModelOptions): BedrockModel {
   };
 }
 
+/** Per-request Bedrock output budget. Callers may lower it but never exceed it. */
+export const maxBedrockRequestTokens = 1200;
+const minBedrockRequestTokens = 256;
+
+/** Clamps the configured token budget, ignoring non-numeric configuration. */
+function resolveMaxRequestTokens(value: string | undefined): number {
+  const parsed = Number(value ?? maxBedrockRequestTokens);
+  if (!Number.isFinite(parsed)) return maxBedrockRequestTokens;
+  return Math.min(Math.max(Math.floor(parsed), minBedrockRequestTokens), maxBedrockRequestTokens);
+}
+
 export function loadBedrockConfig(env: Record<string, string | undefined> = {}) {
   const modelId = env["REPOSHERLOCK_BEDROCK_MODEL_ID"];
   if (!modelId) throw new Error("REPOSHERLOCK_BEDROCK_MODEL_ID is required");
   return {
     modelId,
     region: env["AWS_REGION"] ?? "ap-south-1",
-    maxTokens: Math.min(
-      Math.max(Number(env["REPOSHERLOCK_BEDROCK_MAX_TOKENS"] ?? 1200), 256),
-      4000,
-    ),
+    maxTokens: resolveMaxRequestTokens(env["REPOSHERLOCK_BEDROCK_MAX_TOKENS"]),
   };
 }
