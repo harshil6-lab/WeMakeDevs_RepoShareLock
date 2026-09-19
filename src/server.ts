@@ -2,12 +2,31 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { createApiRouter } from "./api/router";
+import {
+  createConfiguredApiRouter,
+  readCompositionEnv,
+  type ApiRequestHandler,
+} from "./api/composition";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
+let resolvedApiRouter: ApiRequestHandler | undefined;
+
+/**
+ * Resolves the API router once per process. The configured router wires the real
+ * storage, GitHub, retrieval, agent and Bedrock adapters; when deployment
+ * configuration is absent it falls back to the minimal router so local
+ * development and the SSR shell keep working.
+ */
+function getApiRouter(binding: unknown): ApiRequestHandler {
+  if (!resolvedApiRouter)
+    resolvedApiRouter = createConfiguredApiRouter(readCompositionEnv(binding)) ?? createApiRouter();
+  return resolvedApiRouter;
+}
 
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
@@ -47,6 +66,8 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const apiResponse = await getApiRouter(env)(request);
+      if (apiResponse) return apiResponse;
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

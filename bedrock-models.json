@@ -1,0 +1,1649 @@
+{
+    "modelSummaries": [
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/openai.gpt-6-astra",
+            "modelId": "openai.gpt-6-astra",
+            "modelName": "GPT-6 Astra",
+            "providerName": "OpenAI",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-09-08T17:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/nvidia.nemotron-nano-12b-v2",
+            "modelId": "nvidia.nemotron-nano-12b-v2",
+            "modelName": "NVIDIA Nemotron Nano 12B v2 VL BF16",
+            "providerName": "NVIDIA",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/openai.gpt-5.6-terra",
+            "modelId": "openai.gpt-5.6-terra",
+            "modelName": "GPT-5.6 Terra",
+            "providerName": "OpenAI",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-08-13T17:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+            "modelId": "anthropic.claude-haiku-4-5-20251001-v1:0",
+            "modelName": "Claude Haiku 4.5",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-10-15T17:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/qwen.qwen3-235b-a22b-2507-v1:0",
+            "modelId": "qwen.qwen3-235b-a22b-2507-v1:0",
+            "modelName": "Qwen3 235B A22B 2507",
+            "providerName": "Qwen",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-09-15T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/moonshotai.kimi-k2.5",
+            "modelId": "moonshotai.kimi-k2.5",
+            "modelName": "Kimi K2.5",
+            "providerName": "Moonshot AI",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-02-06T18:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/openai.gpt-oss-120b-1:0",
+            "modelId": "openai.gpt-oss-120b-1:0",
+            "modelName": "gpt-oss-120b",
+            "providerName": "OpenAI",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-08-06T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/qwen.qwen3-next-80b-a3b",
+            "modelId": "qwen.qwen3-next-80b-a3b",
+            "modelName": "Qwen3 Next 80B A3B",
+            "providerName": "Qwen",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/moonshotai.kimi-k3",
+            "modelId": "moonshotai.kimi-k3",
+            "modelName": "Kimi K3",
+            "providerName": "Moonshot AI",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-08-27T16:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-fable-5",
+            "modelId": "anthropic.claude-fable-5",
+            "modelName": "Claude Fable 5",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-06-09T10:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/deepseek.v3.2",
+            "modelId": "deepseek.v3.2",
+            "modelName": "DeepSeek V3.2",
+            "providerName": "DeepSeek",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-02-06T18:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/nvidia.nemotron-nano-3-30b",
+            "modelId": "nvidia.nemotron-nano-3-30b",
+            "modelName": "Nemotron Nano 3 30B",
+            "providerName": "NVIDIA",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-23T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-sonnet-4-6",
+            "modelId": "anthropic.claude-sonnet-4-6",
+            "modelName": "Claude Sonnet 4.6",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-02-17T18:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/minimax.minimax-m2",
+            "modelId": "minimax.minimax-m2",
+            "modelName": "MiniMax M2",
+            "providerName": "MiniMax",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/zai.glm-4.7-flash",
+            "modelId": "zai.glm-4.7-flash",
+            "modelName": "GLM 4.7 Flash",
+            "providerName": "Z.AI",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-02-06T18:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/mistral.voxtral-mini-3b-2507",
+            "modelId": "mistral.voxtral-mini-3b-2507",
+            "modelName": "Voxtral Mini 3B 2507",
+            "providerName": "Mistral AI",
+            "inputModalities": [
+                "SPEECH",
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/xai.grok-4.6",
+            "modelId": "xai.grok-4.6",
+            "modelName": "Grok 4.6",
+            "providerName": "xAI",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-08-19T17:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/amazon.nova-2-lite-v1:0",
+            "modelId": "amazon.nova-2-lite-v1:0",
+            "modelName": "Nova 2 Lite",
+            "providerName": "Amazon",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE",
+                "VIDEO"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/minimax.minimax-m2.5",
+            "modelId": "minimax.minimax-m2.5",
+            "modelName": "MiniMax M2.5",
+            "providerName": "MiniMax",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-03-18T17:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/google.gemma-3-12b-it",
+            "modelId": "google.gemma-3-12b-it",
+            "modelName": "Gemma 3 12B IT",
+            "providerName": "Google",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/moonshot.kimi-k2-thinking",
+            "modelId": "moonshot.kimi-k2-thinking",
+            "modelName": "Kimi K2 Thinking",
+            "providerName": "Moonshot AI",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/mistral.mistral-large-3-675b-instruct",
+            "modelId": "mistral.mistral-large-3-675b-instruct",
+            "modelName": "Mistral Large 3",
+            "providerName": "Mistral AI",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/twelvelabs.pegasus-1-2-v1:0",
+            "modelId": "twelvelabs.pegasus-1-2-v1:0",
+            "modelName": "Pegasus v1.2",
+            "providerName": "TwelveLabs",
+            "inputModalities": [
+                "TEXT",
+                "VIDEO"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-10-31T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/mistral.devstral-2-123b",
+            "modelId": "mistral.devstral-2-123b",
+            "modelName": "Devstral 2 123B",
+            "providerName": "Mistral AI",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-02-17T18:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/minimax.minimax-m2.1",
+            "modelId": "minimax.minimax-m2.1",
+            "modelName": "MiniMax M2.1",
+            "providerName": "MiniMax",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-02-06T18:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/nvidia.nemotron-super-3-120b",
+            "modelId": "nvidia.nemotron-super-3-120b",
+            "modelName": "NVIDIA Nemotron 3 Super 120B A12B",
+            "providerName": "NVIDIA",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-03-18T17:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/qwen.qwen3-32b-v1:0",
+            "modelId": "qwen.qwen3-32b-v1:0",
+            "modelName": "Qwen3 32B (dense)",
+            "providerName": "Qwen",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-09-15T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/mistral.ministral-3-14b-instruct",
+            "modelId": "mistral.ministral-3-14b-instruct",
+            "modelName": "Ministral 14B 3.0",
+            "providerName": "Mistral AI",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-opus-4-6-v1",
+            "modelId": "anthropic.claude-opus-4-6-v1",
+            "modelName": "Claude Opus 4.6",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-02-05T18:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/nvidia.nemotron-nano-9b-v2",
+            "modelId": "nvidia.nemotron-nano-9b-v2",
+            "modelName": "NVIDIA Nemotron Nano 9B v2",
+            "providerName": "NVIDIA",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/mistral.ministral-3-8b-instruct",
+            "modelId": "mistral.ministral-3-8b-instruct",
+            "modelName": "Ministral 3 8B",
+            "providerName": "Mistral AI",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/mistral.voxtral-small-24b-2507",
+            "modelId": "mistral.voxtral-small-24b-2507",
+            "modelName": "Voxtral Small 24B 2507",
+            "providerName": "Mistral AI",
+            "inputModalities": [
+                "SPEECH",
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/zai.glm-5",
+            "modelId": "zai.glm-5",
+            "modelName": "GLM 5",
+            "providerName": "Z.AI",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-03-18T17:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/openai.gpt-oss-20b-1:0",
+            "modelId": "openai.gpt-oss-20b-1:0",
+            "modelName": "gpt-oss-20b",
+            "providerName": "OpenAI",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-08-06T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-opus-5",
+            "modelId": "anthropic.claude-opus-5",
+            "modelName": "Claude Opus 5",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-07-23T17:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/google.gemma-3-4b-it",
+            "modelId": "google.gemma-3-4b-it",
+            "modelName": "Gemma 3 4B IT",
+            "providerName": "Google",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-opus-4-8",
+            "modelId": "anthropic.claude-opus-4-8",
+            "modelName": "Claude Opus 4.8",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-05-28T10:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-opus-4-7",
+            "modelId": "anthropic.claude-opus-4-7",
+            "modelName": "Claude Opus 4.7",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-04-16T14:30:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/openai.gpt-oss-safeguard-120b",
+            "modelId": "openai.gpt-oss-safeguard-120b",
+            "modelName": "GPT OSS Safeguard 120B",
+            "providerName": "OpenAI",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/google.gemma-3-27b-it",
+            "modelId": "google.gemma-3-27b-it",
+            "modelName": "Gemma 3 27B PT",
+            "providerName": "Google",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "modelId": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "modelName": "Claude Sonnet 4.5",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-09-29T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/qwen.qwen3-vl-235b-a22b",
+            "modelId": "qwen.qwen3-vl-235b-a22b",
+            "modelName": "Qwen3 VL 235B A22B",
+            "providerName": "Qwen",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-fable-5-1",
+            "modelId": "anthropic.claude-fable-5-1",
+            "modelName": "Claude Fable 5.1",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-08-31T16:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/zai.glm-4.7",
+            "modelId": "zai.glm-4.7",
+            "modelName": "GLM 4.7",
+            "providerName": "Z.AI",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-02-06T18:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/openai.gpt-5.6-luna",
+            "modelId": "openai.gpt-5.6-luna",
+            "modelName": "GPT-5.6 Luna",
+            "providerName": "OpenAI",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-08-13T17:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-sonnet-5",
+            "modelId": "anthropic.claude-sonnet-5",
+            "modelName": "Claude Sonnet 5",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-06-30T10:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/qwen.qwen3-coder-480b-a35b-v1:0",
+            "modelId": "qwen.qwen3-coder-480b-a35b-v1:0",
+            "modelName": "Qwen3 Coder 480B A35B Instruct",
+            "providerName": "Qwen",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-09-15T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/mistral.magistral-small-2509",
+            "modelId": "mistral.magistral-small-2509",
+            "modelName": "Magistral Small 2509",
+            "providerName": "Mistral AI",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/openai.gpt-5.6-sol",
+            "modelId": "openai.gpt-5.6-sol",
+            "modelName": "GPT-5.6 Sol",
+            "providerName": "OpenAI",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2026-08-13T17:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/cohere.embed-v4:0",
+            "modelId": "cohere.embed-v4:0",
+            "modelName": "Embed v4",
+            "providerName": "Cohere",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "EMBEDDING"
+            ],
+            "responseStreamingSupported": false,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-10-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/deepseek.v3-v1:0",
+            "modelId": "deepseek.v3-v1:0",
+            "modelName": "DeepSeek-V3.1",
+            "providerName": "DeepSeek",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-09-15T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/mistral.ministral-3-3b-instruct",
+            "modelId": "mistral.ministral-3-3b-instruct",
+            "modelName": "Ministral 3B",
+            "providerName": "Mistral AI",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-opus-4-5-20251101-v1:0",
+            "modelId": "anthropic.claude-opus-4-5-20251101-v1:0",
+            "modelName": "Claude Opus 4.5",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-11-24T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/qwen.qwen3-coder-30b-a3b-v1:0",
+            "modelId": "qwen.qwen3-coder-30b-a3b-v1:0",
+            "modelName": "Qwen3-Coder-30B-A3B-Instruct",
+            "providerName": "Qwen",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-09-15T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/openai.gpt-oss-safeguard-20b",
+            "modelId": "openai.gpt-oss-safeguard-20b",
+            "modelName": "GPT OSS Safeguard 20B",
+            "providerName": "OpenAI",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-12-02T00:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-image-v1:0",
+            "modelId": "amazon.titan-embed-image-v1:0",
+            "modelName": "Titan Multimodal Embeddings G1",
+            "providerName": "Amazon",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "EMBEDDING"
+            ],
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "PROVISIONED"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2023-11-29T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-image-v1",
+            "modelId": "amazon.titan-embed-image-v1",
+            "modelName": "Titan Multimodal Embeddings G1",
+            "providerName": "Amazon",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "EMBEDDING"
+            ],
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2023-11-29T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v2:0",
+            "modelId": "amazon.titan-embed-text-v2:0",
+            "modelName": "Titan Text Embeddings V2",
+            "providerName": "Amazon",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "EMBEDDING"
+            ],
+            "responseStreamingSupported": false,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-04-30T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/amazon.nova-pro-v1:0",
+            "modelId": "amazon.nova-pro-v1:0",
+            "modelName": "Nova Pro",
+            "providerName": "Amazon",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE",
+                "VIDEO"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-12-03T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/amazon.nova-lite-v1:0",
+            "modelId": "amazon.nova-lite-v1:0",
+            "modelName": "Nova Lite",
+            "providerName": "Amazon",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE",
+                "VIDEO"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-12-03T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/amazon.nova-micro-v1:0",
+            "modelId": "amazon.nova-micro-v1:0",
+            "modelName": "Nova Micro",
+            "providerName": "Amazon",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-12-03T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0:28k",
+            "modelId": "anthropic.claude-3-sonnet-20240229-v1:0:28k",
+            "modelName": "Claude 3 Sonnet",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "PROVISIONED"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-03-04T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0",
+            "modelId": "anthropic.claude-3-sonnet-20240229-v1:0",
+            "modelName": "Claude 3 Sonnet",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-03-04T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0:48k",
+            "modelId": "anthropic.claude-3-haiku-20240307-v1:0:48k",
+            "modelName": "Claude 3 Haiku",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "PROVISIONED"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-03-13T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0",
+            "modelId": "anthropic.claude-3-haiku-20240307-v1:0",
+            "modelName": "Claude 3 Haiku",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-03-13T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0",
+            "modelId": "anthropic.claude-3-5-sonnet-20240620-v1:0",
+            "modelName": "Claude 3.5 Sonnet",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-06-20T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0",
+            "modelId": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+            "modelName": "Claude 3.5 Sonnet v2",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-10-22T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-3-7-sonnet-20250219-v1:0",
+            "modelId": "anthropic.claude-3-7-sonnet-20250219-v1:0",
+            "modelName": "Claude 3.7 Sonnet",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-02-19T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/anthropic.claude-sonnet-4-20250514-v1:0",
+            "modelId": "anthropic.claude-sonnet-4-20250514-v1:0",
+            "modelName": "Claude Sonnet 4",
+            "providerName": "Anthropic",
+            "inputModalities": [
+                "TEXT",
+                "IMAGE"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "INFERENCE_PROFILE"
+            ],
+            "modelLifecycle": {
+                "status": "LEGACY",
+                "startOfLifeTime": "2025-05-22T08:00:00+00:00",
+                "endOfLifeTime": "2026-10-14T07:00:00+00:00",
+                "legacyTime": "2026-04-14T07:00:00+00:00",
+                "publicExtendedAccessTime": "2026-07-14T07:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/cohere.embed-english-v3",
+            "modelId": "cohere.embed-english-v3",
+            "modelName": "Embed English",
+            "providerName": "Cohere",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "EMBEDDING"
+            ],
+            "responseStreamingSupported": false,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-01-24T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/cohere.embed-multilingual-v3",
+            "modelId": "cohere.embed-multilingual-v3",
+            "modelName": "Embed Multilingual",
+            "providerName": "Cohere",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "EMBEDDING"
+            ],
+            "responseStreamingSupported": false,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2025-01-24T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/meta.llama3-8b-instruct-v1:0",
+            "modelId": "meta.llama3-8b-instruct-v1:0",
+            "modelName": "Llama 3 8B Instruct",
+            "providerName": "Meta",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-04-23T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/meta.llama3-70b-instruct-v1:0",
+            "modelId": "meta.llama3-70b-instruct-v1:0",
+            "modelName": "Llama 3 70B Instruct",
+            "providerName": "Meta",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-04-23T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/mistral.mistral-7b-instruct-v0:2",
+            "modelId": "mistral.mistral-7b-instruct-v0:2",
+            "modelName": "Mistral 7B Instruct",
+            "providerName": "Mistral AI",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-03-01T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/mistral.mixtral-8x7b-instruct-v0:1",
+            "modelId": "mistral.mixtral-8x7b-instruct-v0:1",
+            "modelName": "Mixtral 8x7B Instruct",
+            "providerName": "Mistral AI",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-03-01T08:00:00+00:00"
+            }
+        },
+        {
+            "modelArn": "arn:aws:bedrock:ap-south-1::foundation-model/mistral.mistral-large-2402-v1:0",
+            "modelId": "mistral.mistral-large-2402-v1:0",
+            "modelName": "Mistral Large (24.02)",
+            "providerName": "Mistral AI",
+            "inputModalities": [
+                "TEXT"
+            ],
+            "outputModalities": [
+                "TEXT"
+            ],
+            "responseStreamingSupported": true,
+            "customizationsSupported": [],
+            "inferenceTypesSupported": [
+                "ON_DEMAND"
+            ],
+            "modelLifecycle": {
+                "status": "ACTIVE",
+                "startOfLifeTime": "2024-04-03T08:00:00+00:00"
+            }
+        }
+    ]
+}
