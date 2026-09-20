@@ -8,10 +8,12 @@ on:
       - "feature/**"
       - "fix/**"
       - "member*/**"
+
   pull_request:
     branches:
       - main
       - develop
+
   workflow_dispatch:
 
 permissions:
@@ -41,8 +43,10 @@ jobs:
           node --version
           npm --version
 
+      # npm ci is intentionally used here.
+      # The repository lockfile must be reproducible on the CI runner.
       - name: Install dependencies
-        run: npm ci --omit=optional
+        run: npm ci
 
       - name: Lint
         run: npm run lint
