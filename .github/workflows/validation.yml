@@ -45,8 +45,14 @@ jobs:
 
       # npm ci is intentionally used here.
       # The repository lockfile must be reproducible on the CI runner.
-      - name: Install dependencies
-        run: npm ci
+      - name: Regenerate lockfile on Ubuntu
+        run: |
+          npm install --package-lock-only
+          echo "===== LOCKFILE DIFF ====="
+          git diff -- package-lock.json
+          echo "===== EMNAPI ENTRIES ====="
+          grep -n -A8 -B2 '"node_modules/@emnapi/core"' package-lock.json || true
+          grep -n -A8 -B2 '"node_modules/@emnapi/runtime"' package-lock.json || true
 
       - name: Lint
         run: npm run lint
