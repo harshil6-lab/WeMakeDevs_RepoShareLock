@@ -119,3 +119,10 @@
 - Load the Nitro server lazily through a runtime `import()` specifier. Importing a generated artifact from source would create a build-order dependency; the runtime URL keeps the emitted `dist-lambda/index.mjs` free of any static reference to `server/index.mjs` while still resolving next to the bundle at run time.
 - Extract `createLambdaHandler(loadSsrServer)`. The SSR loader is injected so the routing decision is unit-testable without a packaged Nitro bundle, and the production `handler` export keeps the CloudFormation `index.handler` contract untouched.
 - Normalize a missing headers map. Nitro's aws-lambda entry reads `event.headers.host` directly, so a hand-built invocation without headers must not throw before rendering.
+
+## Packet 16 static asset decisions
+
+- Serve the assets from Nitro instead of adding a static host. The deployment has no CDN and no S3 website origin, so the packaged handler must answer `/assets/*` itself; `serveStatic: "inline"` makes Nitro do that with the assets it already builds.
+- Prefer Nitro's inline mode over copying `.output-aws/public` next to the bundle and switching to the `"node"` reader. Inline keeps one artifact, adds no packaging step, makes no assumption about where the public directory lands relative to the server bundle, and cannot drift from the bundle that references the asset names.
+- Keep the change inside the AWS-only build config. `vite.config.aws.ts` is used only by `npm run build:aws`, so the local development and preview build keeps its platform default and the routing bridge from Packet 15 is untouched.
+- Do not weaken the routing rules to fix this. `/api` and `/api/*` still run the API router before Nitro is loaded, unknown browser routes still render the Nitro 404 document, and the asynchronous self-invocation branch is unchanged.

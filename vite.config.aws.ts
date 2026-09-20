@@ -14,6 +14,12 @@ export default defineConfig({
   },
   nitro: {
     preset: "aws-lambda",
+    // The aws-lambda preset does not register Nitro's static handler, so the
+    // built client assets would sit in .output-aws/public for an external host
+    // to serve. This deployment has no CDN or S3 origin in front of the Lambda,
+    // so the SSR handler itself must answer /assets/*, /favicon.ico and
+    // /robots.txt: "inline" embeds the public assets into the server bundle.
+    serveStatic: "inline",
     output: {
       dir: ".output-aws",
     },

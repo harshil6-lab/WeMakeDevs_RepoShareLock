@@ -499,3 +499,7 @@ A record that ends `status=timeout` while SYNTHESIZE logged `success=true` is th
 ### Browser routes and SSR
 
 `GET /` is rendered by the packaged Nitro SSR handler and must return `text/html` with a `<!doctype html>` document. Paths that do not match a TanStack route return the Nitro 404 HTML page, not a Lambda error. `/api` and `/api/*` must keep returning JSON from the API router; if an API response comes back as HTML, the routing bridge is missing from the deployed bundle. Rebuild with `npm run build:aws` and confirm `dist-lambda/index.mjs` contains the runtime `./server/index.mjs` import and that `dist-lambda/server/index.mjs` exists in the package.
+
+### Unstyled page or 404 on /assets/*
+
+If the SSR document renders but its styles and scripts 404, the deployed package has no static handler. Check that `vite.config.aws.ts` still sets `serveStatic: "inline"` and rebuild with `npm run build:aws`; `dist-lambda/server/index.mjs` must then embed the asset manifest, which is visible as the emitted CSS and JS file names inside the bundle. `tests/ssr-static-assets.test.ts` guards both: it asserts the build config, and when `dist-lambda/index.mjs` exists it requests the CSS and JS referenced by the rendered document through the packaged handler and expects `200` with `text/css` / `javascript`. `/api/health` must keep returning JSON; a JSON response proves the request did not reach the SSR renderer.

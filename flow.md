@@ -312,3 +312,20 @@ sequenceDiagram
 ```
 
 `/api` and `/api/*` never reach Nitro; the API router runs first and returns before the SSR loader is invoked. Browser paths are handed to the same packaged Nitro `aws-lambda` handler that already shipped in `dist-lambda/server/index.mjs`, so the Lambda export, the API Gateway integration and the asynchronous self-invocation branch are unchanged.
+
+## Packet 16 static assets in the Lambda
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant L as Lambda (index.handler)
+  participant N as Nitro SSR
+  B->>L: GET /
+  L->>N: handler(event)
+  N-->>B: SSR HTML referencing /assets/*
+  B->>L: GET /assets/styles-*.css
+  L->>N: handler(event)
+  N-->>B: 200 text/css from the asset inlined in the bundle
+```
+
+Nitro's `aws-lambda` preset registers no static handler, so the client assets alone would never be reachable from the Lambda. `serveStatic: "inline"` embeds them into the server bundle and adds the static middleware, which runs before the renderer for every non-API path. The browser therefore loads the same CSS, JS and favicon the build emitted, `/api` and `/api/*` still return through the API router, and neither the API Gateway integration nor the asynchronous invocation path changes.
