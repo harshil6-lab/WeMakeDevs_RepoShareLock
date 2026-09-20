@@ -54,6 +54,16 @@ jobs:
           grep -n -A8 -B2 '"node_modules/@emnapi/core"' package-lock.json || true
           grep -n -A8 -B2 '"node_modules/@emnapi/runtime"' package-lock.json || true
 
+      - name: Install dependencies
+        run: npm install
+
+      - name: Verify dependencies
+        run: |
+          npm --version
+          node --version
+          test -x node_modules/.bin/eslint
+          npm ls eslint
+
       - name: Lint
         run: npm run lint
 
