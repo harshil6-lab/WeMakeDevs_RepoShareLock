@@ -621,18 +621,32 @@ function jsonCandidates(text: string, depth = 0): string[] {
  */
 function parseModelJson<T>(text: string, schema: z.ZodType<T>): T {
   let violation: z.ZodError | undefined;
+  let parseableCandidates = 0;
+
   for (const candidate of jsonCandidates(text)) {
     let parsed: unknown;
+
     try {
       parsed = JSON.parse(candidate);
+      parseableCandidates += 1;
     } catch {
       continue;
     }
+
     const result = schema.safeParse(parsed);
+
     if (result.success) return result.data;
+
     violation = result.error;
   }
-  if (violation) throw violation;
+
+  if (violation) {
+    throw new Error(
+      `Invalid structured model result: ${violation.message}; ` +
+        `parseableCandidates=${parseableCandidates}`,
+    );
+  }
+
   throw new Error("Bedrock response did not contain JSON");
 }
 const claimsSchema = z.object({
