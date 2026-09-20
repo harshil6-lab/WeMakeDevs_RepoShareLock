@@ -292,3 +292,23 @@ sequenceDiagram
 ```
 
 The timeout path only terminates the record while it is still `running`; the abandoned run stops reporting stages once the flag is set, and any write that still loses the condition is dropped at the storage boundary instead of throwing. Exactly one terminal state (`completed`, `failed` or `timeout`) is ever persisted, and the timeout protection is not removed or extended.
+
+## Packet 15 SSR routing
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant APIGW as API Gateway ($default route)
+  participant L as Lambda (index.handler)
+  participant N as Nitro SSR (server/index.mjs)
+  B->>APIGW: GET /api/repositories
+  APIGW->>L: HTTP event
+  L->>L: isApiPath -> createConfiguredApiRouter
+  L-->>B: API Gateway response
+  B->>APIGW: GET /
+  APIGW->>L: HTTP event
+  L->>N: loadNitroServer() then handler(event)
+  N-->>B: rendered HTML
+```
+
+`/api` and `/api/*` never reach Nitro; the API router runs first and returns before the SSR loader is invoked. Browser paths are handed to the same packaged Nitro `aws-lambda` handler that already shipped in `dist-lambda/server/index.mjs`, so the Lambda export, the API Gateway integration and the asynchronous self-invocation branch are unchanged.
