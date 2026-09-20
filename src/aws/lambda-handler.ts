@@ -10,18 +10,22 @@ import {
  *
  * Two kinds of invocation reach this handler:
  *
- * - HTTP events from API Gateway, which are converted to a Fetch `Request`,
- *   handled by the existing RepoSherlock API router (`createConfiguredApiRouter`)
- *   and converted back to an API Gateway response:
+ * - HTTP events from API Gateway. `/api` and `/api/*` are converted to a Fetch
+ *   `Request`, handled by the existing RepoSherlock API router
+ *   (`createConfiguredApiRouter`) and converted back to an API Gateway response.
+ *   Every other path is a browser route and is delegated to the packaged Nitro
+ *   SSR server, which renders the TanStack Start pages:
  *
  *     API Gateway HTTP event -> Fetch Request -> ApiRequestHandler -> Fetch Response
+ *     API Gateway HTTP event -> Nitro aws-lambda handler -> SSR response
  *
  * - Asynchronous self-invocations from `createLambdaDispatcher`, which carry the
  *   `asyncEventMarker`. Those run the already-composed worker or ingestion
  *   runtime so Lambda cannot freeze the work before it completes.
  *
  * These conversions are transport glue only: they do not add a router, a
- * service, or any new API behavior. The API router still owns `/api/*`.
+ * service, an AWS resource or any new API behavior. The API router still owns
+ * `/api/*`, and Nitro never receives an API request.
  */
 
 type AsyncInvocation = {
@@ -179,28 +183,80 @@ function jsonResponse(statusCode: number, body: unknown): ApiGatewayResponse {
   };
 }
 
-export async function handler(event: LambdaEvent, context: unknown): Promise<unknown> {
-  if (event && event.marker === asyncEventMarker) {
-    const runtime = createCompositionRuntime(readCompositionEnv(process.env));
-    if (!runtime) throw new Error("RepoSherlock is not configured for asynchronous work");
-    if (event.kind === "investigation" && event.investigationId) {
-      await runtime.worker.handle({ investigationId: event.investigationId });
-    } else if (event.kind === "index" && event.repositoryId) {
-      await runtime.runIndex({
-        repositoryId: event.repositoryId,
-        userId: event.userId ?? runtime.userId,
-      });
-    } else {
-      throw new Error("Unsupported asynchronous event");
-    }
-    return { statusCode: 200, body: "" };
-  }
+/**
+ * The packaged Nitro SSR server. `scripts/build-lambda.mjs` runs the Nitro
+ * `aws-lambda` preset into `.output-aws/server` and copies it to
+ * `dist-lambda/server`, next to this bundle.
+ */
+type NitroServerModule = {
+  handler: (event: LambdaEvent, context: unknown) => Promise<unknown>;
+};
 
-  // HTTP API requests are handled by the RepoSherlock API router only. Nitro is
-  // still built and packaged, but it does not serve API Gateway traffic.
-  const router = createConfiguredApiRouter(readCompositionEnv(process.env));
-  if (!router) return jsonResponse(503, { error: "RepoSherlock API is not configured" });
-  const response = await router(toFetchRequest(event));
-  if (!response) return jsonResponse(404, { error: "Not found" });
-  return toApiGatewayResponse(response);
+let nitroServerPromise: Promise<NitroServerModule> | undefined;
+
+/**
+ * Loads the packaged Nitro SSR server on first use.
+ *
+ * Nitro exposes only its compiled runtime (`server/index.mjs`); there is no
+ * source-level module that exports this handler, so the generated file is the
+ * only reuse point. The specifier is built at runtime because the Nitro output
+ * is produced and copied in after this bundle is written, so esbuild must not
+ * try to resolve or inline it.
+ */
+function loadNitroServer(): Promise<NitroServerModule> {
+  nitroServerPromise ??= import(
+    new URL("./server/index.mjs", import.meta.url).href
+  ) as Promise<NitroServerModule>;
+  return nitroServerPromise;
 }
+
+/** `/api` and `/api/*` belong to the API router and must never reach Nitro. */
+function isApiPath(path: string): boolean {
+  return path === "/api" || path.startsWith("/api/");
+}
+
+export type LambdaHandler = (event: LambdaEvent, context: unknown) => Promise<unknown>;
+
+/**
+ * Builds the Lambda entry point. The SSR loader is a parameter so the routing
+ * decision can be tested without a packaged Nitro bundle to import.
+ */
+export function createLambdaHandler(
+  loadSsrServer: () => Promise<NitroServerModule>,
+): LambdaHandler {
+  return async function handler(event, context) {
+    if (event && event.marker === asyncEventMarker) {
+      const runtime = createCompositionRuntime(readCompositionEnv(process.env));
+      if (!runtime) throw new Error("RepoSherlock is not configured for asynchronous work");
+      if (event.kind === "investigation" && event.investigationId) {
+        await runtime.worker.handle({ investigationId: event.investigationId });
+      } else if (event.kind === "index" && event.repositoryId) {
+        await runtime.runIndex({
+          repositoryId: event.repositoryId,
+          userId: event.userId ?? runtime.userId,
+        });
+      } else {
+        throw new Error("Unsupported asynchronous event");
+      }
+      return { statusCode: 200, body: "" };
+    }
+
+    // `/api/*` keeps its exact existing behavior; every other path is a browser
+    // route rendered by the Nitro SSR server.
+    if (isApiPath(resolvePath(event))) {
+      const router = createConfiguredApiRouter(readCompositionEnv(process.env));
+      if (!router) return jsonResponse(503, { error: "RepoSherlock API is not configured" });
+      const response = await router(toFetchRequest(event));
+      if (!response) return jsonResponse(404, { error: "Not found" });
+      return toApiGatewayResponse(response);
+    }
+
+    // Nitro reads `event.headers.host` directly, so a hand-built event without a
+    // headers map would throw before rendering.
+    const ssrEvent = event.headers ? event : { ...event, headers: {} };
+    const ssr = await loadSsrServer();
+    return ssr.handler(ssrEvent, context);
+  };
+}
+
+export const handler = createLambdaHandler(loadNitroServer);

@@ -111,3 +111,11 @@
 - Treat a lost `status = running` condition as a benign terminal-state outcome rather than an error. `updateProgress` drops the stale write, and `complete`/`fail` report the loss with a boolean so the worker never overwrites the single terminal state and never escalates a stale write into `INTERNAL_ERROR`. The conditions are kept, not removed, so optimistic concurrency is preserved.
 - Keep exactly one terminal state (`completed` / `failed` / `timeout`). Only the first conditioned write wins; the worker logs `investigation_completion_skipped` or `investigation_failure_skipped` when it loses and returns without changing the record.
 - Attach a rejection handler to the abandoned run. The loser of the race can still reject after the timeout has been reported, so swallowing that rejection keeps a late failure from becoming an unhandled rejection.
+
+## Packet 15 SSR routing decisions
+
+- Bridge the two existing handlers instead of adding a second Lambda or an AWS service. The custom handler already owns the API Gateway `$default` route, so it keeps `/api/*` and forwards every other path to the Nitro `aws-lambda` handler that `npm run build:aws` already emits.
+- Split the plain `/api` path away from browser routes. `isApiPath` matches `/api` and `/api/*` exactly, so a frontend route can never be mistaken for an API request and an API request can never reach Nitro.
+- Load the Nitro server lazily through a runtime `import()` specifier. Importing a generated artifact from source would create a build-order dependency; the runtime URL keeps the emitted `dist-lambda/index.mjs` free of any static reference to `server/index.mjs` while still resolving next to the bundle at run time.
+- Extract `createLambdaHandler(loadSsrServer)`. The SSR loader is injected so the routing decision is unit-testable without a packaged Nitro bundle, and the production `handler` export keeps the CloudFormation `index.handler` contract untouched.
+- Normalize a missing headers map. Nitro's aws-lambda entry reads `event.headers.host` directly, so a hand-built invocation without headers must not throw before rendering.

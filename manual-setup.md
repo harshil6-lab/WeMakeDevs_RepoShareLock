@@ -495,3 +495,7 @@ A Zod `invalid_type` at `claims` means no schema-valid claims envelope reached v
 ### `timeout` after a successful SYNTHESIZE
 
 A record that ends `status=timeout` while SYNTHESIZE logged `success=true` is the expected outcome when the run exceeds the 30 s bound. The late continuation no longer writes progress, so a following `storage_operation_failed` / `ConditionalCheckFailedException` on `write investigation progress` should be gone. If it still appears, the deployed bundle predates Packet 14: rebuild with `npm run build:aws`. An `investigation_completion_skipped` or `investigation_failure_skipped` log line is normal and means the single terminal state was already recorded.
+
+### Browser routes and SSR
+
+`GET /` is rendered by the packaged Nitro SSR handler and must return `text/html` with a `<!doctype html>` document. Paths that do not match a TanStack route return the Nitro 404 HTML page, not a Lambda error. `/api` and `/api/*` must keep returning JSON from the API router; if an API response comes back as HTML, the routing bridge is missing from the deployed bundle. Rebuild with `npm run build:aws` and confirm `dist-lambda/index.mjs` contains the runtime `./server/index.mjs` import and that `dist-lambda/server/index.mjs` exists in the package.
