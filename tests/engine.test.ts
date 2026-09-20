@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { indexSourceFile } from "../src/retrieval";
+import { createBedrockModel } from "../src/investigation/bedrock";
 import {
+  claimsOutputContract,
   createInvestigationTools,
   investigationLimits,
   resolveInvestigationLimits,
   runInvestigation,
+  synthesizeOutputContract,
   type ToolDependencies,
 } from "../src/investigation/engine";
 import type { GitHubClient } from "../src/github/types";
@@ -106,7 +109,7 @@ describe("investigation engine", () => {
     const model = {
       converse: async (_system: string, prompt: string) => {
         if (prompt.includes("[PHASE:SYNTHESIZE]")) {
-          const evidenceId = prompt.match(/file:[a-f0-9]+/)?.[0];
+          const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
           return JSON.stringify({
             claims: [
               { text: "The handler waits before acknowledging.", evidenceIds: [evidenceId] },
@@ -114,7 +117,7 @@ describe("investigation engine", () => {
           });
         }
         if (prompt.includes("[PHASE:HYPOTHESIZE]")) {
-          const evidenceId = prompt.match(/file:[a-f0-9]+/)?.[0];
+          const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
           return JSON.stringify({
             claims: [{ text: "The handler may delay acknowledgement.", evidenceIds: [evidenceId] }],
           });
@@ -161,6 +164,415 @@ describe("investigation engine", () => {
       claims: [],
       evidence: [],
     });
+  });
+
+  it("states the claims contract in the prompt so the model returns claims", async () => {
+    const setupState = setup();
+    await indexSourceFile(setupState.storage, setupState.artifacts, {
+      repositoryId: "repo-a",
+      filePath: "src/payment.ts",
+      commitSha: "commit-a",
+      content: "await paymentProvider.request(); // timeout\nreturn acknowledge();",
+    });
+    const prompts: string[] = [];
+    // Reproduces the production failure: the model only emits the required
+    // structure when the prompt states the contract. Without it the response was
+    // {"hypothesis": ...} and validation failed with "claims: Required".
+    const model = {
+      converse: async (_system: string, prompt: string) => {
+        prompts.push(prompt);
+        if (!prompt.includes("[PHASE:HYPOTHESIZE]") && !prompt.includes("[PHASE:SYNTHESIZE]"))
+          return "{}";
+        if (!prompt.includes(claimsOutputContract))
+          return JSON.stringify({ hypothesis: "The payment provider may be slow." });
+        const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+        return JSON.stringify({
+          claims: [{ text: "The handler may delay acknowledgement.", evidenceIds: [evidenceId] }],
+        });
+      },
+    };
+
+    const result = await runInvestigation(
+      {
+        repositoryId: "repo-a",
+        owner: "acme",
+        name: "payments",
+        ref: "main",
+        commitSha: "commit-a",
+        issueNumber: 42,
+        issueTitle: "Payment timeout",
+      },
+      { ...setupState, model },
+      { maxIterations: 1, maxToolCalls: 12, maxTokenBudget: 6000, timeoutMs: 5000 },
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.claims.length).toBeGreaterThan(0);
+
+    const hypothesize = prompts.find((prompt) => prompt.includes("[PHASE:HYPOTHESIZE]"));
+    expect(hypothesize).toContain(claimsOutputContract);
+    expect(hypothesize).toMatch(/"claims"/);
+    expect(hypothesize).toMatch(/evidenceIds/);
+    // The contract is an instruction, so it is kept outside the data envelope.
+    expect(hypothesize!.indexOf(claimsOutputContract)).toBeLessThan(
+      hypothesize!.indexOf("<repository-data>"),
+    );
+    expect(prompts.find((prompt) => prompt.includes("[PHASE:SYNTHESIZE]"))).toContain(
+      claimsOutputContract,
+    );
+  });
+
+  it("still rejects a response that omits claims instead of accepting it", async () => {
+    const setupState = setup();
+    await indexSourceFile(setupState.storage, setupState.artifacts, {
+      repositoryId: "repo-a",
+      filePath: "src/payment.ts",
+      commitSha: "commit-a",
+      content: "await paymentProvider.request(); // timeout\nreturn acknowledge();",
+    });
+    const result = await runInvestigation(
+      {
+        repositoryId: "repo-a",
+        owner: "acme",
+        name: "payments",
+        ref: "main",
+        commitSha: "commit-a",
+        issueNumber: 42,
+        issueTitle: "Payment timeout",
+      },
+      {
+        ...setupState,
+        model: {
+          converse: async (_system: string, prompt: string) =>
+            prompt.includes("[PHASE:HYPOTHESIZE]")
+              ? JSON.stringify({ hypothesis: "The payment provider may be slow." })
+              : JSON.stringify({ claims: [] }),
+        },
+      },
+      { maxIterations: 1, maxToolCalls: 12, maxTokenBudget: 6000, timeoutMs: 5000 },
+    );
+    expect(result).toMatchObject({ status: "failed", claims: [], evidence: [] });
+  });
+});
+
+describe("synthesize output contract and JSON extraction", () => {
+  const input = {
+    repositoryId: "repo-a",
+    owner: "acme",
+    name: "payments",
+    ref: "main",
+    commitSha: "commit-a",
+    issueNumber: 42,
+    issueTitle: "Payment timeout",
+  };
+  const options = { maxIterations: 1, maxToolCalls: 12, maxTokenBudget: 6000, timeoutMs: 5000 };
+  const fileContent = "await paymentProvider.request(); // timeout\nreturn acknowledge();";
+
+  async function indexedSetup() {
+    const setupState = setup();
+    await indexSourceFile(setupState.storage, setupState.artifacts, {
+      repositoryId: "repo-a",
+      filePath: "src/payment.ts",
+      commitSha: "commit-a",
+      content: fileContent,
+    });
+    return setupState;
+  }
+
+  it("tells the synthesizer to emit raw JSON with escaped quotes, without changing the HYPOTHESIZE contract", async () => {
+    const setupState = await indexedSetup();
+    const prompts: string[] = [];
+    const result = await runInvestigation(
+      input,
+      {
+        ...setupState,
+        model: {
+          converse: async (_system: string, prompt: string) => {
+            prompts.push(prompt);
+            const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+            if (prompt.includes("[PHASE:SYNTHESIZE]"))
+              return JSON.stringify({
+                claims: [
+                  { text: "The handler waits before acknowledging.", evidenceIds: [evidenceId] },
+                ],
+              });
+            if (prompt.includes("[PHASE:HYPOTHESIZE]"))
+              return JSON.stringify({
+                claims: [
+                  { text: "The handler may delay acknowledgement.", evidenceIds: [evidenceId] },
+                ],
+              });
+            return "{}";
+          },
+        },
+      },
+      options,
+    );
+    expect(result.status).toBe("completed");
+
+    const synthesize = prompts.find((prompt) => prompt.includes("[PHASE:SYNTHESIZE]"));
+    expect(synthesize).toContain(synthesizeOutputContract);
+    expect(synthesize).toContain(claimsOutputContract);
+    expect(synthesize).toMatch(/no markdown code fences/);
+    expect(synthesize).toMatch(/escape/i);
+    expect(synthesize).toMatch(/raw line break/);
+
+    // The HYPOTHESIZE contract is untouched by this change.
+    const hypothesize = prompts.find((prompt) => prompt.includes("[PHASE:HYPOTHESIZE]"));
+    expect(hypothesize).toContain(claimsOutputContract);
+    expect(hypothesize).not.toContain(synthesizeOutputContract);
+  });
+
+  it("rejects a claim text that breaks JSON instead of repairing it", async () => {
+    const setupState = await indexedSetup();
+    const result = await runInvestigation(
+      input,
+      {
+        ...setupState,
+        model: {
+          converse: async (_system: string, prompt: string) => {
+            const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+            if (prompt.includes("[PHASE:SYNTHESIZE]"))
+              // The production failure mode: an unescaped quote inside an array
+              // string, which JSON.parse rejects with
+              // "Expected ',' or ']' after array element".
+              return '{\n  "claims": [\n    {"text": "x", "evidenceIds": ["file:abc"def"]}\n  ]\n}';
+            if (prompt.includes("[PHASE:HYPOTHESIZE]"))
+              return JSON.stringify({
+                claims: [
+                  { text: "The handler may delay acknowledgement.", evidenceIds: [evidenceId] },
+                ],
+              });
+            return "{}";
+          },
+        },
+      },
+      options,
+    );
+    expect(result).toMatchObject({ status: "failed", claims: [], evidence: [] });
+  });
+
+  it("still finds the answer when the model appends a note containing braces", async () => {
+    const setupState = await indexedSetup();
+    const result = await runInvestigation(
+      input,
+      {
+        ...setupState,
+        model: {
+          converse: async (_system: string, prompt: string) => {
+            const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+            if (prompt.includes("[PHASE:SYNTHESIZE]"))
+              return `${JSON.stringify({
+                claims: [
+                  { text: "The handler waits before acknowledging.", evidenceIds: [evidenceId] },
+                ],
+              })}\n\nNote: keep {} and {"claims":[]} escaped.`;
+            if (prompt.includes("[PHASE:HYPOTHESIZE]"))
+              return JSON.stringify({
+                claims: [
+                  { text: "The handler may delay acknowledgement.", evidenceIds: [evidenceId] },
+                ],
+              });
+            return "{}";
+          },
+        },
+      },
+      options,
+    );
+    expect(result.status).toBe("completed");
+    expect(result.claims.length).toBeGreaterThan(0);
+  });
+
+  it("parses a synthesis envelope the model wrapped in another object", async () => {
+    const setupState = await indexedSetup();
+    const result = await runInvestigation(
+      input,
+      {
+        ...setupState,
+        model: {
+          converse: async (_system: string, prompt: string) => {
+            const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+            if (prompt.includes("[PHASE:SYNTHESIZE]"))
+              // Production shape: the claims envelope is nested under a wrapper
+              // object, so the first balanced object has no top-level `claims`
+              // and parseModelJson reported claims: Required (undefined).
+              return JSON.stringify({
+                reasoning: "The handler waits for the provider before acking.",
+                result: {
+                  claims: [
+                    { text: "The handler waits before acknowledging.", evidenceIds: [evidenceId] },
+                  ],
+                },
+              });
+            if (prompt.includes("[PHASE:HYPOTHESIZE]"))
+              return JSON.stringify({
+                claims: [
+                  { text: "The handler may delay acknowledgement.", evidenceIds: [evidenceId] },
+                ],
+              });
+            return "{}";
+          },
+        },
+      },
+      options,
+    );
+    expect(result.status).toBe("completed");
+    expect(result.claims).toHaveLength(1);
+    expect(result.claims[0]?.evidenceIds[0]).toBe(result.evidence[0]?.evidenceId);
+  });
+
+  it("parses a synthesis envelope preceded by a reasoning object", async () => {
+    const setupState = await indexedSetup();
+    const result = await runInvestigation(
+      input,
+      {
+        ...setupState,
+        model: {
+          converse: async (_system: string, prompt: string) => {
+            const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+            if (prompt.includes("[PHASE:SYNTHESIZE]"))
+              // The first balanced object is reasoning, not the claims envelope.
+              return (
+                '{"note":"analysis only"}\n' +
+                JSON.stringify({
+                  claims: [
+                    { text: "The handler waits before acknowledging.", evidenceIds: [evidenceId] },
+                  ],
+                })
+              );
+            if (prompt.includes("[PHASE:HYPOTHESIZE]"))
+              return JSON.stringify({
+                claims: [
+                  { text: "The handler may delay acknowledgement.", evidenceIds: [evidenceId] },
+                ],
+              });
+            return "{}";
+          },
+        },
+      },
+      options,
+    );
+    expect(result.status).toBe("completed");
+    expect(result.claims).toHaveLength(1);
+  });
+
+  it("parses a synthesis envelope the model double-encoded as a string", async () => {
+    const setupState = await indexedSetup();
+    const result = await runInvestigation(
+      input,
+      {
+        ...setupState,
+        model: {
+          converse: async (_system: string, prompt: string) => {
+            const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+            if (prompt.includes("[PHASE:SYNTHESIZE]"))
+              return JSON.stringify({
+                output: JSON.stringify({
+                  claims: [
+                    { text: "The handler waits before acknowledging.", evidenceIds: [evidenceId] },
+                  ],
+                }),
+              });
+            if (prompt.includes("[PHASE:HYPOTHESIZE]"))
+              return JSON.stringify({
+                claims: [
+                  { text: "The handler may delay acknowledgement.", evidenceIds: [evidenceId] },
+                ],
+              });
+            return "{}";
+          },
+        },
+      },
+      options,
+    );
+    expect(result.status).toBe("completed");
+    expect(result.claims).toHaveLength(1);
+  });
+
+  it("recovers the claims envelope from a later Converse content block", async () => {
+    const setupState = await indexedSetup();
+    // The real application boundary: createBedrockModel receives the Converse
+    // response whose message.content is an ordered ContentBlock[]. The first
+    // block carries reasoning JSON without `claims`; the envelope is in a later
+    // block. The adapter must forward every block, not just the first.
+    const client = {
+      send: async (command: {
+        input: { messages?: Array<{ content?: Array<{ text?: string }> }> };
+      }) => {
+        const prompt = command.input.messages?.[0]?.content?.[0]?.text ?? "";
+        const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+        if (prompt.includes("[PHASE:SYNTHESIZE]"))
+          return {
+            output: {
+              message: {
+                content: [
+                  { text: JSON.stringify({ analysis: "The handler awaits the provider." }) },
+                  {
+                    text: JSON.stringify({
+                      claims: [
+                        {
+                          text: "The handler waits before acknowledging.",
+                          evidenceIds: [evidenceId],
+                        },
+                      ],
+                    }),
+                  },
+                ],
+              },
+            },
+          };
+        if (prompt.includes("[PHASE:HYPOTHESIZE]"))
+          return {
+            output: {
+              message: {
+                content: [
+                  {
+                    text: JSON.stringify({
+                      claims: [
+                        {
+                          text: "The handler may delay acknowledgement.",
+                          evidenceIds: [evidenceId],
+                        },
+                      ],
+                    }),
+                  },
+                ],
+              },
+            },
+          };
+        return { output: { message: { content: [{ text: "{}" }] } } };
+      },
+    };
+    const model = createBedrockModel({ modelId: "test.model-v1", client: client as never });
+    const result = await runInvestigation(input, { ...setupState, model }, options);
+    expect(result.status).toBe("completed");
+    expect(result.claims).toHaveLength(1);
+    expect(result.claims[0]?.evidenceIds[0]).toBe(result.evidence[0]?.evidenceId);
+  });
+  it("still rejects a synthesis response whose objects never carry claims", async () => {
+    const setupState = await indexedSetup();
+    const result = await runInvestigation(
+      input,
+      {
+        ...setupState,
+        model: {
+          converse: async (_system: string, prompt: string) => {
+            const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+            if (prompt.includes("[PHASE:SYNTHESIZE]"))
+              return JSON.stringify({ analysis: "The provider is slow." });
+            if (prompt.includes("[PHASE:HYPOTHESIZE]"))
+              return JSON.stringify({
+                claims: [
+                  { text: "The handler may delay acknowledgement.", evidenceIds: [evidenceId] },
+                ],
+              });
+            return "{}";
+          },
+        },
+      },
+      options,
+    );
+    expect(result).toMatchObject({ status: "failed", claims: [], evidence: [] });
   });
 });
 describe("bounded investigation limits", () => {

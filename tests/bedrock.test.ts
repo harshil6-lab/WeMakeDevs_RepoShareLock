@@ -29,6 +29,49 @@ describe("bedrock model adapter", () => {
     });
   });
 
+  it("returns every text content block, not just the first", async () => {
+    // Converse returns an ordered ContentBlock[]. SYNTHESIZE may put reasoning
+    // JSON in the first text block and the claims envelope in a later one;
+    // returning only the first block dropped the envelope and produced
+    // "claims: Required (undefined)".
+    const client = {
+      send: async () => ({
+        output: {
+          message: {
+            content: [
+              { text: '{"analysis":"the handler awaits the provider"}' },
+              { text: '{"claims":[{"text":"t","evidenceIds":["file:a:1-2"]}]}' },
+            ],
+          },
+        },
+      }),
+    };
+    const model = createBedrockModel({ modelId: "test.model-v1", client: client as never });
+    const text = await model.converse("SYSTEM", "USER", 512);
+    expect(text).toBe(
+      '{"analysis":"the handler awaits the provider"}\n' +
+        '{"claims":[{"text":"t","evidenceIds":["file:a:1-2"]}]}',
+    );
+  });
+  it("forwards every block of a two-block Converse response to the JSON parser", async () => {
+    // Exact production SYNTHESIZE shape: a reasoning object in the first text
+    // block and the claims envelope in the second. parseModelJson is schema
+    // driven and iterates the candidates of whatever string it is handed, so
+    // the adapter must hand it BOTH blocks; returning only the first is what
+    // produced "claims: Required (undefined)" in production.
+    const reasoning = '{"analysis":"reasoning"}';
+    const envelope = '{"claims":[{"text":"test","evidenceIds":["file:test"]}]}';
+    const client = {
+      send: async () => ({
+        output: { message: { content: [{ text: reasoning }, { text: envelope }] } },
+      }),
+    };
+    const model = createBedrockModel({ modelId: "test.model-v1", client: client as never });
+    const text = await model.converse("SYSTEM", "USER", 512);
+    expect(text.split("\n")).toEqual([reasoning, envelope]);
+    expect(text).toContain('"claims"');
+  });
+
   it("fails instead of returning empty text", async () => {
     const model = createBedrockModel({
       modelId: "test.model-v1",
