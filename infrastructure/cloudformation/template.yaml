@@ -12,7 +12,14 @@ Parameters:
     AllowedPattern: "^[a-z][a-z0-9-]{1,15}$"
   BedrockModelArns:
     Type: CommaDelimitedList
-    Description: Comma-separated foundation model ARNs allowed for bedrock:InvokeModel.
+    Default: "arn:aws:bedrock:ap-south-1::foundation-model/nvidia.nemotron-nano-12b-v2"
+    Description: Comma-separated foundation model ARNs allowed for bedrock:InvokeModel; must match the runtime model id.
+  BedrockRoleArn:
+    Type: String
+    Default: "arn:aws:iam::343218215737:role/RepoSherlockBedrockRole"
+    Description: >-
+      Cross-account role in the Bedrock account assumed by the Lambda to invoke
+      the runtime model. Only this exact role may be assumed.
   GitHubSecretName:
     Type: String
     Default: reposherlock/github
@@ -218,6 +225,10 @@ Resources:
                 Effect: Allow
                 Action: bedrock:InvokeModel
                 Resource: !Ref BedrockModelArns
+              - Sid: BedrockRoleAssumption
+                Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Ref BedrockRoleArn
               - Sid: AsyncSelfInvocation
                 Effect: Allow
                 Action: lambda:InvokeFunction

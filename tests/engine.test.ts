@@ -64,6 +64,21 @@ function setup() {
   return { storage, artifacts, github, context, records };
 }
 
+function evidenceBackedModel(prompts: string[]) {
+  return {
+    converse: async (_system: string, prompt: string) => {
+      prompts.push(prompt);
+      if (prompt.includes("[PHASE:HYPOTHESIZE]") || prompt.includes("[PHASE:SYNTHESIZE]")) {
+        const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+        return JSON.stringify({
+          claims: [{ text: "The handler waits before acknowledging.", evidenceIds: [evidenceId] }],
+        });
+      }
+      return "{}";
+    },
+  };
+}
+
 describe("investigation engine", () => {
   it("validates tool inputs, preserves provenance, and blocks cross-repository access", async () => {
     const setupState = setup();
@@ -98,7 +113,7 @@ describe("investigation engine", () => {
     ).rejects.toThrow("did not resolve");
   });
 
-  it("runs one bounded orchestrator and returns only resolved claims", async () => {
+  it("accepts a direct HYPOTHESIZE claims envelope and returns only resolved claims", async () => {
     const setupState = setup();
     await indexSourceFile(setupState.storage, setupState.artifacts, {
       repositoryId: "repo-a",
@@ -143,6 +158,218 @@ describe("investigation engine", () => {
     expect(result.evidence[0]?.provenance.repositoryId).toBe("repo-a");
   });
 
+  it("continues with an empty related-issue result without fabricating evidence", async () => {
+    const setupState = setup();
+    setupState.github.searchRelated = async () => ({ items: [] });
+    await indexSourceFile(setupState.storage, setupState.artifacts, {
+      repositoryId: "repo-a",
+      filePath: "src/payment.ts",
+      commitSha: "commit-a",
+      content: "await paymentProvider.request(); // timeout\nreturn acknowledge();",
+    });
+    const prompts: string[] = [];
+    const result = await runInvestigation(
+      {
+        repositoryId: "repo-a",
+        owner: "acme",
+        name: "payments",
+        ref: "main",
+        commitSha: "commit-a",
+        issueNumber: 42,
+        issueTitle: "Payment timeout",
+      },
+      { ...setupState, model: evidenceBackedModel(prompts) },
+      { maxIterations: 1, maxToolCalls: 12, maxTokenBudget: 6000, timeoutMs: 5000 },
+    );
+    expect(result.status).toBe("completed");
+    expect(result.evidence.some((item) => item.provenance.type === "issue")).toBe(false);
+    const hypothesisPrompt = prompts.find((prompt) => prompt.includes("[PHASE:HYPOTHESIZE]"));
+    expect(hypothesisPrompt).toContain('"issues":[]');
+  });
+
+  it("continues with related issues and preserves their real evidence", async () => {
+    const setupState = setup();
+    await indexSourceFile(setupState.storage, setupState.artifacts, {
+      repositoryId: "repo-a",
+      filePath: "src/payment.ts",
+      commitSha: "commit-a",
+      content: "await paymentProvider.request(); // timeout\nreturn acknowledge();",
+    });
+    const prompts: string[] = [];
+    const result = await runInvestigation(
+      {
+        repositoryId: "repo-a",
+        owner: "acme",
+        name: "payments",
+        ref: "main",
+        commitSha: "commit-a",
+        issueNumber: 42,
+        issueTitle: "Payment timeout",
+      },
+      { ...setupState, model: evidenceBackedModel(prompts) },
+      { maxIterations: 1, maxToolCalls: 12, maxTokenBudget: 6000, timeoutMs: 5000 },
+    );
+    expect(result.status).toBe("completed");
+    expect(result.claims[0]?.evidenceIds[0]).toBe(result.evidence[0]?.evidenceId);
+    expect(prompts.find((prompt) => prompt.includes("[PHASE:HYPOTHESIZE]"))).toContain(
+      '"number":42',
+    );
+  });
+
+  it("continues when related-issue search fails and records only failure context", async () => {
+    const setupState = setup();
+    setupState.github.searchRelated = async () => {
+      throw new Error("GitHub related search unavailable");
+    };
+    await indexSourceFile(setupState.storage, setupState.artifacts, {
+      repositoryId: "repo-a",
+      filePath: "src/payment.ts",
+      commitSha: "commit-a",
+      content: "await paymentProvider.request(); // timeout\nreturn acknowledge();",
+    });
+    const prompts: string[] = [];
+    const result = await runInvestigation(
+      {
+        repositoryId: "repo-a",
+        owner: "acme",
+        name: "payments",
+        ref: "main",
+        commitSha: "commit-a",
+        issueNumber: 42,
+        issueTitle: "Payment timeout",
+      },
+      { ...setupState, model: evidenceBackedModel(prompts) },
+      { maxIterations: 1, maxToolCalls: 12, maxTokenBudget: 6000, timeoutMs: 5000 },
+    );
+    expect(result.status).toBe("completed");
+    expect(result.evidence.some((item) => item.provenance.type === "issue")).toBe(false);
+    const hypothesisPrompt = prompts.find((prompt) => prompt.includes("[PHASE:HYPOTHESIZE]"));
+    expect(hypothesisPrompt).toContain("relatedSearchError");
+    expect(hypothesisPrompt).toContain("GitHub related search unavailable");
+  });
+
+  it("stops reporting stages once the timeout wins the race", async () => {
+    const setupState = setup();
+    await indexSourceFile(setupState.storage, setupState.artifacts, {
+      repositoryId: "repo-a",
+      filePath: "src/payment.ts",
+      commitSha: "commit-a",
+      content: "await paymentProvider.request(); // timeout\nreturn acknowledge();",
+    });
+    const stages: string[] = [];
+    // SYNTHESIZE is held open until after the bounded timeout fires, so the
+    // continuation that used to keep running (and write progress) is released
+    // late. This reproduces the production race where the abandoned run tried to
+    // update a record the timeout path had already made terminal.
+    let releaseSynthesize: (() => void) | undefined;
+    const model = {
+      converse: async (_system: string, prompt: string) => {
+        if (prompt.includes("[PHASE:SYNTHESIZE]"))
+          return new Promise<string>((resolve) => {
+            const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+            releaseSynthesize = () =>
+              resolve(
+                JSON.stringify({ claims: [{ text: "Late claim", evidenceIds: [evidenceId] }] }),
+              );
+          });
+        if (prompt.includes("[PHASE:HYPOTHESIZE]")) {
+          const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+          return JSON.stringify({
+            claims: [{ text: "The handler may delay acknowledgement.", evidenceIds: [evidenceId] }],
+          });
+        }
+        return "{}";
+      },
+    };
+    const pending = runInvestigation(
+      {
+        repositoryId: "repo-a",
+        owner: "acme",
+        name: "payments",
+        ref: "main",
+        commitSha: "commit-a",
+        issueNumber: 42,
+        issueTitle: "Payment timeout",
+      },
+      { ...setupState, model },
+      {
+        maxIterations: 1,
+        maxToolCalls: 12,
+        maxTokenBudget: 6000,
+        timeoutMs: 1000,
+        onStageChange: (stage) => {
+          stages.push(stage);
+        },
+      },
+    );
+    while (releaseSynthesize === undefined) await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    releaseSynthesize();
+    const result = await pending;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(result.status).toBe("failed");
+    expect(result.summary).toMatch(/timed out/i);
+    expect(stages).toContain("synthesizing");
+    // The abandoned run must not report the stages that follow the timeout.
+    expect(stages).not.toContain("validating");
+    expect(stages).not.toContain("completed");
+  });
+
+  it("does not surface an unhandled rejection from a run abandoned by the timeout", async () => {
+    const setupState = setup();
+    await indexSourceFile(setupState.storage, setupState.artifacts, {
+      repositoryId: "repo-a",
+      filePath: "src/payment.ts",
+      commitSha: "commit-a",
+      content: "await paymentProvider.request(); // timeout\nreturn acknowledge();",
+    });
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown) => rejections.push(reason);
+    process.on("unhandledRejection", onRejection);
+    try {
+      let failSynthesize: (() => void) | undefined;
+      const model = {
+        converse: async (_system: string, prompt: string) => {
+          if (prompt.includes("[PHASE:SYNTHESIZE]"))
+            return new Promise<string>((_resolve, reject) => {
+              failSynthesize = () => reject(new Error("Bedrock failed after the timeout"));
+            });
+          if (prompt.includes("[PHASE:HYPOTHESIZE]")) {
+            const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+            return JSON.stringify({
+              claims: [
+                { text: "The handler may delay acknowledgement.", evidenceIds: [evidenceId] },
+              ],
+            });
+          }
+          return "{}";
+        },
+      };
+      const pending = runInvestigation(
+        {
+          repositoryId: "repo-a",
+          owner: "acme",
+          name: "payments",
+          ref: "main",
+          commitSha: "commit-a",
+          issueNumber: 42,
+          issueTitle: "Payment timeout",
+        },
+        { ...setupState, model },
+        { maxIterations: 1, maxToolCalls: 12, maxTokenBudget: 6000, timeoutMs: 1000 },
+      );
+      while (failSynthesize === undefined) await new Promise((resolve) => setTimeout(resolve, 5));
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      failSynthesize();
+      const result = await pending;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(result.status).toBe("failed");
+      expect(result.summary).toMatch(/timed out/i);
+      expect(rejections).toHaveLength(0);
+    } finally {
+      process.off("unhandledRejection", onRejection);
+    }
+  });
   it("returns a validated failed result when the call budget is exceeded", async () => {
     const setupState = setup();
     const result = await runInvestigation(
@@ -252,6 +479,89 @@ describe("investigation engine", () => {
       { maxIterations: 1, maxToolCalls: 12, maxTokenBudget: 6000, timeoutMs: 5000 },
     );
     expect(result).toMatchObject({ status: "failed", claims: [], evidence: [] });
+  });
+
+  it("keeps HYPOTHESIZE claim evidence validation strict", async () => {
+    const setupState = setup();
+    await indexSourceFile(setupState.storage, setupState.artifacts, {
+      repositoryId: "repo-a",
+      filePath: "src/payment.ts",
+      commitSha: "commit-a",
+      content: "await paymentProvider.request(); // timeout\nreturn acknowledge();",
+    });
+    const result = await runInvestigation(
+      {
+        repositoryId: "repo-a",
+        owner: "acme",
+        name: "payments",
+        ref: "main",
+        commitSha: "commit-a",
+        issueNumber: 42,
+        issueTitle: "Payment timeout",
+      },
+      {
+        ...setupState,
+        model: {
+          converse: async (_system: string, prompt: string) => {
+            if (prompt.includes("[PHASE:HYPOTHESIZE]"))
+              return JSON.stringify({
+                claims: [{ text: "Unsupported hypothesis", evidenceIds: [] }],
+              });
+            return JSON.stringify({ claims: [] });
+          },
+        },
+      },
+      { maxIterations: 1, maxToolCalls: 12, maxTokenBudget: 6000, timeoutMs: 5000 },
+    );
+    expect(result).toMatchObject({ status: "failed", claims: [], evidence: [] });
+  });
+
+  it("keeps the final evidence mapped to every synthesized claim", async () => {
+    const setupState = setup();
+    await indexSourceFile(setupState.storage, setupState.artifacts, {
+      repositoryId: "repo-a",
+      filePath: "src/payment.ts",
+      commitSha: "commit-a",
+      content: "await paymentProvider.request(); // timeout\nreturn acknowledge();",
+    });
+    const result = await runInvestigation(
+      {
+        repositoryId: "repo-a",
+        owner: "acme",
+        name: "payments",
+        ref: "main",
+        commitSha: "commit-a",
+        issueNumber: 42,
+        issueTitle: "Payment timeout",
+      },
+      {
+        ...setupState,
+        model: {
+          converse: async (_system: string, prompt: string) => {
+            const evidenceId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0];
+            if (prompt.includes("[PHASE:HYPOTHESIZE]"))
+              return JSON.stringify({
+                claims: [{ text: "Hypothesis", evidenceIds: [evidenceId] }],
+              });
+            if (prompt.includes("[PHASE:SYNTHESIZE]"))
+              return JSON.stringify({
+                claims: [
+                  { text: "First validated claim", evidenceIds: [evidenceId] },
+                  { text: "Second validated claim", evidenceIds: [evidenceId] },
+                ],
+              });
+            return "{}";
+          },
+        },
+      },
+      { maxIterations: 1, maxToolCalls: 12, maxTokenBudget: 6000, timeoutMs: 5000 },
+    );
+    expect(result.status).toBe("completed");
+    expect(result.claims).toHaveLength(2);
+    expect(result.evidence).toHaveLength(1);
+    const evidenceIds = new Set(result.evidence.map((item) => item.evidenceId));
+    for (const claim of result.claims)
+      for (const id of claim.evidenceIds) expect(evidenceIds.has(id)).toBe(true);
   });
 });
 
@@ -526,6 +836,7 @@ describe("synthesize output contract and JSON extraction", () => {
             output: {
               message: {
                 content: [
+                  { text: JSON.stringify({ analysis: "The handler awaits the provider." }) },
                   {
                     text: JSON.stringify({
                       claims: [

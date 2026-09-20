@@ -92,6 +92,16 @@ function logDynamoFailure(operation: string, cause: unknown): void {
   );
 }
 
+/**
+ * True when a conditional write lost its condition (for example `status =
+ * running` after a terminal transition). The record already reached a terminal
+ * state or was claimed elsewhere, so the caller must treat the write as a
+ * benign no-op instead of an error.
+ */
+function isConditionalCheckFailed(cause: unknown): boolean {
+  return cause instanceof Error && cause.name === "ConditionalCheckFailedException";
+}
+
 function withError<T>(operation: string, action: () => Promise<T>): Promise<T> {
   return action().catch((cause) => {
     logDynamoFailure(operation, cause);
@@ -267,8 +277,7 @@ export function createDynamoRepository(options: DynamoRepositoryOptions): Reposi
         );
         return true;
       } catch (cause) {
-        if (cause instanceof Error && cause.name === "ConditionalCheckFailedException")
-          return false;
+        if (isConditionalCheckFailed(cause)) return false;
         throw new StorageError("STORAGE_WRITE_FAILED", "claim investigation failed", cause);
       }
     },
@@ -278,9 +287,9 @@ export function createDynamoRepository(options: DynamoRepositoryOptions): Reposi
       progress: number,
       updatedAt: string,
     ) =>
-      withError("write investigation progress", () =>
-        client
-          .send(
+      withError("write investigation progress", async () => {
+        try {
+          await client.send(
             new UpdateCommand({
               TableName: options.tableName,
               Key: tableKeys.investigation(investigationId),
@@ -295,9 +304,15 @@ export function createDynamoRepository(options: DynamoRepositoryOptions): Reposi
                 ":updatedAt": updatedAt,
               },
             }),
-          )
-          .then(() => undefined),
-      ),
+          );
+        } catch (cause) {
+          // Progress only matters while the investigation runs. When a terminal
+          // transition (completed/timeout/failed) won the race the condition no
+          // longer holds, so the stale write is dropped on purpose: it must
+          // never resurrect or overwrite a terminal record.
+          if (!isConditionalCheckFailed(cause)) throw cause;
+        }
+      }),
     complete: (
       investigationId: string,
       result: Record<string, unknown>,
@@ -305,16 +320,20 @@ export function createDynamoRepository(options: DynamoRepositoryOptions): Reposi
       durationMs: number,
       updatedAt: string,
     ) =>
-      withError("complete investigation", () =>
-        client
-          .send(
+      withError("complete investigation", async (): Promise<boolean> => {
+        try {
+          await client.send(
             new UpdateCommand({
               TableName: options.tableName,
               Key: tableKeys.investigation(investigationId),
               ConditionExpression: "#status = :running",
               UpdateExpression:
-                "SET #status = :completed, currentStage = :stage, progress = :progress, result = :result, completedAt = :completedAt, durationMs = :durationMs, updatedAt = :updatedAt REMOVE #error, failureCode",
-              ExpressionAttributeNames: { "#status": "status", "#error": "error" },
+                "SET #status = :completed, currentStage = :stage, progress = :progress, #result = :result, completedAt = :completedAt, durationMs = :durationMs, updatedAt = :updatedAt REMOVE #error, failureCode",
+              ExpressionAttributeNames: {
+                "#status": "status",
+                "#error": "error",
+                "#result": "result",
+              },
               ExpressionAttributeValues: {
                 ":running": "running",
                 ":completed": "completed",
@@ -326,9 +345,15 @@ export function createDynamoRepository(options: DynamoRepositoryOptions): Reposi
                 ":updatedAt": updatedAt,
               },
             }),
-          )
-          .then(() => undefined),
-      ),
+          );
+          return true;
+        } catch (cause) {
+          // Another terminal transition already recorded the outcome; report
+          // the loss so the caller never overwrites that single state.
+          if (isConditionalCheckFailed(cause)) return false;
+          throw cause;
+        }
+      }),
     fail: (
       investigationId: string,
       status: "failed" | "timeout",
@@ -338,9 +363,9 @@ export function createDynamoRepository(options: DynamoRepositoryOptions): Reposi
       durationMs: number,
       updatedAt: string,
     ) =>
-      withError("fail investigation", () =>
-        client
-          .send(
+      withError("fail investigation", async (): Promise<boolean> => {
+        try {
+          await client.send(
             new UpdateCommand({
               TableName: options.tableName,
               Key: tableKeys.investigation(investigationId),
@@ -358,9 +383,15 @@ export function createDynamoRepository(options: DynamoRepositoryOptions): Reposi
                 ":updatedAt": updatedAt,
               },
             }),
-          )
-          .then(() => undefined),
-      ),
+          );
+          return true;
+        } catch (cause) {
+          // Losing this condition means the investigation already terminated
+          // (for example the timeout path won), so keep that single state.
+          if (isConditionalCheckFailed(cause)) return false;
+          throw cause;
+        }
+      }),
   };
 
   const evidence = {

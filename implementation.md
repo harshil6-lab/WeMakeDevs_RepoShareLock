@@ -215,3 +215,11 @@ npm.cmd run rollback            # redeploy the previous Lambda package (scripts/
 python scripts/validate-templates.py
 cfn-lint infrastructure/cloudformation/template.yaml infrastructure/cloudformation/app.yaml
 ```
+
+### Synthesis JSON extraction (Packet 13)
+
+`createBedrockModel` now returns every text block of the Converse response, joined in order, instead of only the first (`output.message.content` is an ordered `ContentBlock[]`). The SYNTHESIZE answer can be emitted in a later block than a reasoning block, and the previous `.find((item) => item.text)?.text` extraction dropped it, so `parseModelJson` only ever saw a claims-less reasoning object. `parseModelJson` extracts JSON from the forwarded text and returns the first candidate that satisfies `claimsSchema`, including JSON nested in object or array string values. Validation is unchanged: non-empty claim text plus 1-8 resolved evidence ids, and a response without a schema-valid payload still fails as `INVALID_AGENT_RESULT`. `tests/bedrock.test.ts` and `tests/engine.test.ts` add regression tests for the multi-block Converse response; the HYPOTHESIZE prompt, contract and schema are untouched.
+
+### Timeout and terminal-state coordination (Packet 14)
+
+`runInvestigation` bounds a run at 30 s by racing `run()` against a timeout promise. A Bedrock or tool call cannot be aborted mid-flight, so the timed-out continuation used to keep executing and its later `stage()` calls wrote progress with `ConditionExpression "#status = :running"` after the worker had already recorded `timeout`, producing a `ConditionalCheckFailedException`. The engine now sets a `cancelled` flag when the timeout fires and `stage()` becomes a no-op, so nothing is written after the terminal transition, and the abandoned promise gets a rejection handler so a late failure cannot become an unhandled rejection. On the storage boundary `updateProgress` drops a stale write, and `complete`/`fail` return a boolean (`true` = the terminal write won) while keeping their `status = running` conditions. The worker consumes that boolean: on `false` it logs `investigation_completion_skipped`/`investigation_failure_skipped` and leaves the existing terminal state untouched. The timeout cap and the `failed`/`timeout` statuses are unchanged.

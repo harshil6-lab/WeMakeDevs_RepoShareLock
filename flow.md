@@ -271,3 +271,24 @@ The deployment is two CloudFormation stacks. The foundation stack owns the data,
 At runtime CloudFront is the single public entry point. The default behavior proxies `/api/*` and SSR pages to API Gateway → Lambda; `/assets/*` and the static root files are served directly from the S3 frontend bucket through an Origin Access Control. Because the browser calls the relative `/api` base on the CloudFront domain, requests stay same-origin and no wildcard CORS header is emitted.
 
 Long investigations run asynchronously: the API returns `202` with an `investigationId`, then the Lambda self-invokes itself with `InvocationType: "Event"` and the `reposherlock.async` marker. A client that retries the same event cannot start a second run because claiming is conditional on `queued`. The Lambda timeout (300 s) leaves generous headroom over the bounded agent timeout (30 s).
+
+The Bedrock boundary returns plain text: `createBedrockModel` joins every text block of the Converse response (`output.message.content` is an ordered `ContentBlock[]`) instead of only the first, so a reasoning block cannot hide the claims envelope. `parseModelJson` then returns the first JSON candidate that satisfies `claimsSchema`, including JSON nested in object or array string values. A response with no schema-valid object still fails as `INVALID_AGENT_RESULT`; no claim is invented.
+
+## Packet 14 timeout and terminal state
+
+```mermaid
+sequenceDiagram
+  participant W as Worker
+  participant E as Engine (run())
+  participant D as DynamoDB
+  W->>D: claimQueued (status = running)
+  W->>E: race(run(), 30 s timeout)
+  E->>D: updateProgress per stage (condition status = running)
+  Note over E: SYNTHESIZE completes after the 30 s bound
+  W->>D: timeout wins -> fail(status = timeout, condition status = running)
+  E-->>E: cancelled = true, stage() becomes a no-op
+  Note over D: the late progress write is dropped, never applied
+  W-->>W: terminal write returns false -> skipped log
+```
+
+The timeout path only terminates the record while it is still `running`; the abandoned run stops reporting stages once the flag is set, and any write that still loses the condition is dropped at the storage boundary instead of throwing. Exactly one terminal state (`completed`, `failed` or `timeout`) is ever persisted, and the timeout protection is not removed or extended.

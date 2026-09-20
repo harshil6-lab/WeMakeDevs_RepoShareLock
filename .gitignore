@@ -33,3 +33,13 @@ dist-lambda.zip
 *.njsproj
 *.sln
 *.sw?
+
+reposherlock-lambda.zip
+
+# Local AWS/Bedrock debug artifacts
+bedrock-test.json
+inference.json
+lambda-response.json
+messages.json
+nova-test.json
+system.json

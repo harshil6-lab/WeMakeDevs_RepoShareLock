@@ -199,13 +199,25 @@ export function createInvestigationWorker(
             "Agent did not return a completed evidence-backed result",
           );
         const completedAt = new Date().toISOString();
-        await options.storage.investigations.complete(
+        const completed = await options.storage.investigations.complete(
           record.investigationId,
           result,
           completedAt,
           Date.now() - startedMs,
           completedAt,
         );
+        // A terminal write that lost its `status = running` condition means the
+        // investigation already finished (for example the timeout path won), so
+        // keep that single outcome instead of reporting a completion.
+        if (!completed) {
+          options.logger?.warn("investigation_completion_skipped", {
+            investigationId: record.investigationId,
+            repositoryId: record.repositoryId,
+            issueNumber: record.issueNumber,
+            durationMs: Date.now() - startedMs,
+          });
+          return;
+        }
         options.logger?.info("investigation_completed", {
           investigationId: record.investigationId,
           repositoryId: record.repositoryId,
@@ -217,7 +229,7 @@ export function createInvestigationWorker(
         const code = failureCode(error);
         const status = code === "INVESTIGATION_TIMEOUT" ? "timeout" : "failed";
         const completedAt = new Date().toISOString();
-        await options.storage.investigations.fail(
+        const recorded = await options.storage.investigations.fail(
           record.investigationId,
           status,
           code,
@@ -226,6 +238,20 @@ export function createInvestigationWorker(
           Date.now() - startedMs,
           completedAt,
         );
+        // Losing the condition means a terminal state already exists (the
+        // investigation completed, or another path recorded it first), so this
+        // failure is dropped rather than overwriting that single state.
+        if (!recorded) {
+          options.logger?.warn("investigation_failure_skipped", {
+            investigationId: record.investigationId,
+            repositoryId: record.repositoryId,
+            issueNumber: record.issueNumber,
+            status,
+            errorCode: code,
+            durationMs: Date.now() - startedMs,
+          });
+          return;
+        }
         options.logger?.error("investigation_failed", {
           investigationId: record.investigationId,
           repositoryId: record.repositoryId,

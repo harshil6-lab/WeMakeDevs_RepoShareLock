@@ -46,10 +46,10 @@ export function createBedrockModel(options: BedrockModelOptions): BedrockModel {
         }),
       );
       // Converse returns the answer as an ordered list of content blocks, and a
-      // model may split it across several text blocks (for example a reasoning
-      // block followed by the JSON answer). Returning only the first text block
-      // dropped the SYNTHESIZE claims envelope, which surfaced as
-      // "claims: Required (undefined)". Keep every text block, in order.
+      // model may split any phase response across several text blocks. Returning
+      // only the first block can drop the claims envelope from HYPOTHESIZE or
+      // SYNTHESIZE, which surfaces as "claims: Required (undefined)". Keep every
+      // text block in order so ask() and parseModelJson share one response path.
       const text = (response.output?.message?.content ?? [])
         .map((item) => item.text)
         .filter((value): value is string => typeof value === "string" && value.length > 0)

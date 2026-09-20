@@ -93,8 +93,38 @@ describe("infrastructure least privilege", () => {
     expect(template).not.toMatch(/Action:\s*"\*"/);
     expect(template).not.toMatch(/-\s*"\*"\s*$/m);
     expect(template).not.toMatch(/(s3|dynamodb|bedrock):\*/);
+    expect(template).toMatch(/Action:\s*bedrock:InvokeModel\b/);
     expect(template).toMatch(/Resource:\s*!Ref BedrockModelArns/);
-    expect(template).not.toMatch(/foundation-model\/[a-z0-9.-]+/i);
+    // The one approved model ARN is allowed as the parameter default; the IAM
+    // resource itself must stay a parameter reference, never a literal ARN.
+    expect(template).toMatch(
+      /Default:\s*"arn:aws:bedrock:ap-south-1::foundation-model\/nvidia\.nemotron-nano-12b-v2"/,
+    );
+    expect(template).not.toMatch(/foundation-model\/(?!nvidia\.nemotron-nano-12b-v2)[a-z0-9.-]+/i);
+    expect(template).not.toMatch(/Resource:\s*arn:aws:bedrock/i);
+  });
+});
+
+describe("cross-account Bedrock role assumption", () => {
+  const foundation = readFileSync(
+    join(workspace, "infrastructure", "cloudformation", "template.yaml"),
+    "utf8",
+  );
+  const app = readFileSync(join(workspace, "infrastructure", "cloudformation", "app.yaml"), "utf8");
+
+  it("scopes sts:AssumeRole to the exact Bedrock role, never a wildcard", () => {
+    expect(foundation).toMatch(/Sid:\s*BedrockRoleAssumption/);
+    expect(foundation).toMatch(/Action:\s*sts:AssumeRole\b/);
+    expect(foundation).toMatch(/Resource:\s*!Ref BedrockRoleArn/);
+    expect(foundation).not.toMatch(/Action:\s*sts:\*/);
+    expect(foundation).toMatch(
+      /Default:\s*"arn:aws:iam::343218215737:role\/RepoSherlockBedrockRole"/,
+    );
+  });
+
+  it("passes the exact cross-account role ARN into the Lambda environment", () => {
+    expect(app).toMatch(/REPOSHERLOCK_BEDROCK_ROLE_ARN:\s*!Ref BedrockRoleArn/);
+    expect(app).toMatch(/Default:\s*arn:aws:iam::343218215737:role\/RepoSherlockBedrockRole/);
   });
 });
 

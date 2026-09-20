@@ -96,7 +96,7 @@ const input = {
 function createModel(overrides: { synthesize?: string } = {}): BedrockModel {
   return {
     converse: async (_system: string, prompt: string) => {
-      const id = prompt.match(/file:[a-f0-9]+/)?.[0] ?? "file:missing";
+      const id = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0] ?? "file:missing";
       if (prompt.includes("[PHASE:SYNTHESIZE]")) {
         if (overrides.synthesize !== undefined) return overrides.synthesize;
         return JSON.stringify({
@@ -228,9 +228,38 @@ describe("agent safety bounds", () => {
     expect(result.summary).toMatch(/resolve/i);
   });
 
-  it("rejects duplicated citations instead of persisting duplicate evidence", async () => {
+  it("resolves a retrieved chunk cited by the locator in its provenance", async () => {
+    // Regression: retrieval evidence used to be keyed by an opaque
+    // `file:<chunkId>` hash while the model could only reproduce the
+    // `file:<filePath>:<startLine>-<endLine>` locator shown in provenance, so a
+    // valid-looking citation failed `buildEvidence` with
+    // EVIDENCE_VALIDATION_FAILED.
     const state = await indexFixture();
-    const realId = state.records[0]?.chunkId ?? "missing";
+    const record = state.records[0]!;
+    const locator = `file:${record.filePath}:${record.startLine}-${record.endLine}`;
+    const result = await runInvestigation(
+      input,
+      {
+        ...state,
+        github: createGithub(),
+        context,
+        model: createModel({
+          synthesize: JSON.stringify({
+            claims: [{ text: "The webhook awaits the provider.", evidenceIds: [locator] }],
+          }),
+        }),
+      },
+      { timeoutMs: 5000 },
+    );
+    expect(result.status).toBe("completed");
+    expect(result.claims[0]?.evidenceIds).toEqual([locator]);
+    expect(result.evidence[0]?.evidenceId).toBe(locator);
+  });
+
+  it("deduplicates shared citations while preserving every validated claim", async () => {
+    const state = await indexFixture();
+    const record = state.records[0]!;
+    const realId = `file:${record.filePath}:${record.startLine}-${record.endLine}`;
     const result = await runInvestigation(
       input,
       {
@@ -240,16 +269,19 @@ describe("agent safety bounds", () => {
         model: createModel({
           synthesize: JSON.stringify({
             claims: [
-              { text: "First claim.", evidenceIds: ["file:" + realId] },
-              { text: "Second claim.", evidenceIds: ["file:" + realId] },
+              { text: "First claim.", evidenceIds: [realId] },
+              { text: "Second claim.", evidenceIds: [realId] },
             ],
           }),
         }),
       },
       { timeoutMs: 5000 },
     );
-    expect(result).toMatchObject({ status: "failed", evidence: [] });
-    expect(result.summary).toMatch(/unique/i);
+    expect(result.status).toBe("completed");
+    expect(result.claims).toHaveLength(2);
+    expect(result.claims.every((claim) => claim.evidenceIds.includes(realId))).toBe(true);
+    expect(result.evidence).toHaveLength(1);
+    expect(result.evidence[0]?.evidenceId).toBe(realId);
   });
 
   it("returns an empty, validated failure when retrieval and history are empty", async () => {

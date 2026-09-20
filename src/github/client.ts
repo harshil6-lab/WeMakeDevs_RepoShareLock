@@ -69,6 +69,92 @@ function pageResult<T>(items: T[], page: number, maxPages: number): GitHubPage<T
   return items.length === 100 && page < maxPages ? { items, nextPage: page + 1 } : { items };
 }
 
+/**
+ * GitHub's search API answers HTTP 422 for an invalid query: a `q` longer than
+ * 256 characters, more than five AND/OR/NOT operators, request syntax it cannot
+ * parse, or a query that omits an explicit issue/pull-request qualifier. An
+ * issue title is untrusted repository text of unbounded length, so only whole
+ * tokens from a strict character set are forwarded; every quoting character and
+ * search operator is outside that set, so repository content can never inject
+ * search syntax. Titles with no usable token fall back to the qualifiers alone.
+ */
+export const maxSearchQueryLength = 256;
+const maxSearchOperators = 5;
+/**
+ * GitHub's search endpoint rejects a query without this qualifier (HTTP 422:
+ * "Query must include 'is:issue' or 'is:pull-request'"). RepoSherlock looks for
+ * related issues, so every generated query pins it.
+ */
+const relatedIssueQualifier = "is:issue";
+/** The same safe token set the engine and retrieval tokenizers already use. */
+const searchTokenPattern = /[A-Za-z0-9_$-]+/g;
+
+/** Number of boolean operators GitHub would interpret in a query. */
+export function countSearchOperators(query: string): number {
+  return (query.match(/\b(?:AND|OR|NOT)\b/g) ?? []).length;
+}
+
+export function buildSearchQuery(owner: string, name: string, query: string): string {
+  const qualifiers = `repo:${owner}/${name} ${relatedIssueQualifier}`;
+  const budget = Math.max(0, maxSearchQueryLength - qualifiers.length - 1);
+  const terms: string[] = [];
+  let operators = 0;
+  let length = 0;
+  for (const raw of query.match(searchTokenPattern) ?? []) {
+    // A leading "-" would be a GitHub negation operator, not a search term.
+    const term = raw.replace(/^-+/, "");
+    if (term.length < 2 || !/[A-Za-z0-9]/.test(term)) continue;
+    if (/^(and|or|not)$/i.test(term)) {
+      if (operators >= maxSearchOperators) continue;
+      operators += 1;
+    }
+    const nextLength = length === 0 ? term.length : length + 1 + term.length;
+    if (nextLength > budget) continue;
+    terms.push(term);
+    length = nextLength;
+  }
+  return terms.length === 0 ? qualifiers : `${qualifiers} ${terms.join(" ")}`;
+}
+
+/** Drops the query string so a logged path can never carry repository content. */
+function requestPathOnly(path: string): string {
+  return path.split("?")[0] ?? path;
+}
+
+/**
+ * Reads GitHub's validation detail from a failed response. Only the structured
+ * error fields are kept, and the result is bounded; credentials and response
+ * bodies are never returned or logged verbatim.
+ */
+async function readGitHubErrorDetail(response: Response): Promise<string | undefined> {
+  try {
+    const parsed: unknown = JSON.parse(await response.text());
+    if (!parsed || typeof parsed !== "object") return undefined;
+    const body = parsed as { message?: unknown; errors?: unknown };
+    const parts: string[] = [];
+    if (typeof body.message === "string") parts.push(body.message);
+    if (Array.isArray(body.errors))
+      for (const item of body.errors.slice(0, 3)) {
+        if (!item || typeof item !== "object") continue;
+        const error = item as {
+          resource?: unknown;
+          field?: unknown;
+          code?: unknown;
+          message?: unknown;
+        };
+        const locator = [error.resource, error.field, error.code]
+          .filter((value): value is string => typeof value === "string")
+          .join("/");
+        if (locator.length > 0) parts.push(locator);
+        if (typeof error.message === "string") parts.push(error.message);
+      }
+    const detail = parts.join(" | ").replace(/\s+/g, " ").trim();
+    return detail.length === 0 ? undefined : detail.slice(0, 240);
+  } catch {
+    return undefined;
+  }
+}
+
 export function createGitHubClient(options: GitHubClientOptions): GitHubClient {
   const fetcher = options.fetcher ?? fetch;
   const baseUrl = options.baseUrl ?? "https://api.github.com";
@@ -114,7 +200,7 @@ export function createGitHubClient(options: GitHubClientOptions): GitHubClient {
         const waitMs = Number.isFinite(resetAt) ? Math.max(0, resetAt * 1000 - Date.now()) : 1000;
         if (attempt < maxAttempts) {
           options.logger?.warn("github_rate_limit_retry", {
-            path,
+            path: requestPathOnly(path),
             attempt,
             waitMs: Math.min(waitMs, 10_000),
           });
@@ -127,13 +213,25 @@ export function createGitHubClient(options: GitHubClientOptions): GitHubClient {
           response.status,
         );
       }
-      if (!retryable || attempt === maxAttempts)
+      if (!retryable || attempt === maxAttempts) {
+        const detail = await readGitHubErrorDetail(response);
+        options.logger?.error("github_request_failed", {
+          path: requestPathOnly(path),
+          status: response.status,
+          ...(detail === undefined ? {} : { detail }),
+        });
         throw new GitHubError(
           "GITHUB_REQUEST_FAILED",
           `GitHub request failed with status ${response.status}`,
           response.status,
+          detail,
         );
-      options.logger?.warn("github_request_retry", { path, status: response.status, attempt });
+      }
+      options.logger?.warn("github_request_retry", {
+        path: requestPathOnly(path),
+        status: response.status,
+        attempt,
+      });
       const retryAfter = Number(response.headers.get("retry-after"));
       await new Promise((resolve) =>
         setTimeout(
@@ -198,10 +296,22 @@ export function createGitHubClient(options: GitHubClientOptions): GitHubClient {
         `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits/${encodeURIComponent(sha)}`,
         commitSchema,
       ),
-    searchRelated: (owner, name, query, page = 1) =>
-      request(
-        `/search/issues?q=${encodeURIComponent(`repo:${owner}/${name} ${query}`)}&per_page=100&page=${page}`,
+    searchRelated: (owner, name, query, page = 1) => {
+      const bounded = buildSearchQuery(owner, name, query);
+      // Bounded, non-sensitive request diagnostics: never the token, the raw
+      // issue title, or the composed query.
+      options.logger?.info("github_search_query", {
+        owner,
+        name,
+        queryLength: query.length,
+        boundedLength: bounded.length,
+        operators: countSearchOperators(bounded),
+        sanitized: bounded !== `repo:${owner}/${name} ${relatedIssueQualifier} ${query}`,
+      });
+      return request(
+        `/search/issues?q=${encodeURIComponent(bounded)}&per_page=100&page=${page}`,
         searchSchema,
-      ).then((result) => pageResult(result.items, page, maxPages)),
+      ).then((result) => pageResult(result.items, page, maxPages));
+    },
   };
 }

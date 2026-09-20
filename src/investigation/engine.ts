@@ -683,6 +683,12 @@ export async function runInvestigation(
     repositoryId: input.repositoryId,
     issueNumber: input.issueNumber,
   };
+  // `Promise.race` below cannot abort a Bedrock or tool call that is already in
+  // flight, so the losing `run()` keeps executing after a timeout. This flag
+  // makes that abandoned continuation stop reporting stages: once the worker
+  // has persisted the terminal state a late progress write would lose its
+  // `status = running` condition and surface as an unhandled failure.
+  let cancelled = false;
   const run = async () => {
     const { tools, ledger } = createInvestigationTools(dependencies);
     let toolCalls = 0;
@@ -747,6 +753,9 @@ export async function runInvestigation(
       }
     };
     const stage = async (value: InvestigationStage) => {
+      // A cancelled run must not write progress: the timeout path already owns
+      // the terminal record.
+      if (cancelled) return;
       await options.onStageChange?.(value);
     };
     await stage("understanding_issue");
@@ -758,6 +767,7 @@ export async function runInvestigation(
     let retrieved = 0;
     let history: ToolOutput<z.infer<typeof historyOutputSchema>["data"]> | undefined;
     let related: ToolOutput<z.infer<typeof relatedOutputSchema>["data"]> | undefined;
+    let relatedSearchError: string | undefined;
     while (iteration < limits.maxIterations && retrieved < limits.maxRetrievedChunks) {
       iteration += 1;
       await stage("searching_repository");
@@ -792,12 +802,24 @@ export async function runInvestigation(
             commitSha: historyResult.data.commits[0]!.sha,
           }),
         );
-      related = await call("searchRelatedIssues", () =>
-        tools.searchRelatedIssues({
-          repositoryId: input.repositoryId,
-          query: input.issueTitle ?? `issue ${input.issueNumber}`,
-        }),
-      );
+      try {
+        related = await call("searchRelatedIssues", () =>
+          tools.searchRelatedIssues({
+            repositoryId: input.repositoryId,
+            query: input.issueTitle ?? `issue ${input.issueNumber}`,
+          }),
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "Maximum tool calls exceeded") throw error;
+        // Related issues are optional enrichment. Preserve the failure as
+        // bounded context, but do not invent issue evidence or stop the
+        // evidence-backed investigation before HYPOTHESIZE.
+        relatedSearchError = boundedText(
+          error instanceof Error ? error.message : String(error),
+          200,
+        );
+        related = { data: { issues: [] }, provenance: [] };
+      }
       await stage("finding_related_issues");
       await ask(
         "HYPOTHESIZE",
@@ -806,6 +828,7 @@ export async function runInvestigation(
           search: search.data,
           history,
           related,
+          ...(relatedSearchError === undefined ? {} : { relatedSearchError }),
           availableEvidence: [...ledger.keys()],
         }),
         claimsSchema,
@@ -823,6 +846,7 @@ export async function runInvestigation(
         issueNumber: input.issueNumber,
         history,
         related,
+        ...(relatedSearchError === undefined ? {} : { relatedSearchError }),
         availableEvidence: [...ledger.keys()],
         evidence: [...ledger.values()].slice(0, 24).map((item) => ({
           evidenceId: item.evidenceId,
@@ -846,12 +870,15 @@ export async function runInvestigation(
         ),
       ),
     );
-    const evidence = verified.flatMap((item) => item.data.evidence);
-    if (
-      evidence.length === 0 ||
-      evidence.length !== new Set(evidence.map((item) => item.evidenceId)).size
-    )
-      throw new Error("Synthesis did not resolve unique evidence");
+    const evidenceById = new Map<string, Evidence>();
+    for (const item of verified)
+      for (const evidenceItem of item.data.evidence)
+        evidenceById.set(evidenceItem.evidenceId, evidenceItem);
+    const evidence = [...evidenceById.values()];
+    if (evidence.length === 0) throw new Error("Synthesis did not resolve evidence");
+    for (const claim of synthesis.claims)
+      for (const id of claim.evidenceIds)
+        if (!evidenceById.has(id)) throw new Error(`Claim evidence did not resolve: ${id}`);
     const result = await tools.generateInvestigation({
       repositoryId: input.repositoryId,
       issueNumber: input.issueNumber,
@@ -863,19 +890,30 @@ export async function runInvestigation(
     await stage("completed");
     return result;
   };
-  return Promise.race([
-    run(),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Investigation timed out")), limits.timeoutMs),
-    ),
-  ]).catch((error: unknown) =>
-    investigationSchema.parse({
+  const runPromise = run();
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      cancelled = true;
+      reject(new Error("Investigation timed out"));
+    }, limits.timeoutMs);
+  });
+  try {
+    return await Promise.race([runPromise, timeoutPromise]);
+  } catch (error: unknown) {
+    return investigationSchema.parse({
       repositoryId: input.repositoryId,
       issueNumber: input.issueNumber,
       summary: `Investigation failed: ${error instanceof Error ? error.message : "unknown error"}`,
       claims: [],
       evidence: [],
       status: "failed",
-    }),
-  );
+    });
+  } finally {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    // The race settles with the first outcome; the loser may still reject after
+    // that. Attach a handler so an abandoned run can never become an unhandled
+    // rejection once the timeout has already been reported.
+    void runPromise.catch(() => undefined);
+  }
 }
