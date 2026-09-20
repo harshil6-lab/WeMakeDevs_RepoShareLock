@@ -120,7 +120,7 @@ function createRecordingModel(calls: ModelCall[], synthesizeId?: string) {
   return {
     converse: async (system: string, prompt: string) => {
       calls.push({ system, prompt });
-      const realId = prompt.match(/file:[a-f0-9]+/)?.[0] ?? "file:missing";
+      const realId = prompt.match(/file:[^"\s]*:\d+-\d+/)?.[0] ?? "file:missing";
       const cited = synthesizeId ?? realId;
       if (prompt.includes("[PHASE:SYNTHESIZE]"))
         return JSON.stringify({

@@ -91,7 +91,9 @@ export function createInMemoryRepositoryStore(): GoldenStore {
       updateProgress: async (investigationId, stage, progress, updatedAt) => {
         const record = investigationsById.get(investigationId);
         if (!record) throw new Error("Investigation was not found");
-        if (record.status !== "running") throw new Error("Stale worker cannot update progress");
+        // Progress is dropped once the investigation reaches a terminal state,
+        // matching the conditional DynamoDB write.
+        if (record.status !== "running") return;
         investigationsById.set(investigationId, {
           ...record,
           currentStage: stage,
@@ -102,7 +104,7 @@ export function createInMemoryRepositoryStore(): GoldenStore {
       complete: async (investigationId, result, completedAt, durationMs, updatedAt) => {
         const record = investigationsById.get(investigationId);
         if (!record) throw new Error("Investigation was not found");
-        if (record.status !== "running") throw new Error("Stale worker cannot complete");
+        if (record.status !== "running") return false;
         investigationsById.set(investigationId, {
           ...record,
           status: "completed",
@@ -115,6 +117,7 @@ export function createInMemoryRepositoryStore(): GoldenStore {
           failureCode: undefined,
           error: undefined,
         });
+        return true;
       },
       fail: async (
         investigationId,
@@ -127,7 +130,7 @@ export function createInMemoryRepositoryStore(): GoldenStore {
       ) => {
         const record = investigationsById.get(investigationId);
         if (!record) throw new Error("Investigation was not found");
-        if (record.status !== "running") throw new Error("Stale worker cannot fail");
+        if (record.status !== "running") return false;
         investigationsById.set(investigationId, {
           ...record,
           status,
@@ -137,6 +140,7 @@ export function createInMemoryRepositoryStore(): GoldenStore {
           durationMs,
           updatedAt,
         });
+        return true;
       },
     },
     evidence: {

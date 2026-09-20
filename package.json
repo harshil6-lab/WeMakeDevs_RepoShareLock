@@ -15,14 +15,12 @@
     "test": "vitest run",
     "format": "prettier --write ."
   },
-  "overrides": {
-    "rolldown": "1.2.1"
-  },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1135.0",
     "@aws-sdk/client-dynamodb": "^3.1135.0",
     "@aws-sdk/client-lambda": "^3.1135.0",
     "@aws-sdk/client-s3": "^3.1135.0",
+    "@aws-sdk/credential-providers": "^3.1135.0",
     "@aws-sdk/lib-dynamodb": "^3.1135.0",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -92,6 +90,7 @@
     "globals": "^15.15.0",
     "nitro": "3.0.260603-beta",
     "prettier": "^3.7.3",
+    "rolldown": "1.1.5",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "8.1.5",

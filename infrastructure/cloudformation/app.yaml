@@ -66,6 +66,12 @@ Parameters:
   BedrockMaxTokens:
     Type: String
     Default: "1200"
+  BedrockRoleArn:
+    Type: String
+    Default: arn:aws:iam::343218215737:role/RepoSherlockBedrockRole
+    Description: >-
+      Cross-account Bedrock role assumed by the Lambda at runtime; empty uses the
+      default AWS credential chain.
   GitHubSecretName:
     Type: String
     Default: reposherlock/github
@@ -114,6 +120,7 @@ Resources:
           REPOSHERLOCK_BUCKET_NAME: !Ref ArtifactsBucketName
           REPOSHERLOCK_BEDROCK_MODEL_ID: !Ref BedrockModelId
           REPOSHERLOCK_BEDROCK_MAX_TOKENS: !Ref BedrockMaxTokens
+          REPOSHERLOCK_BEDROCK_ROLE_ARN: !Ref BedrockRoleArn
           REPOSHERLOCK_ASYNC_FUNCTION_NAME: !Sub ${ProjectName}-${EnvironmentName}
           REPOSHERLOCK_GITHUB_TOKEN: !Sub "{{resolve:secretsmanager:${GitHubSecretName}:SecretString:githubToken}}"
       Tags:

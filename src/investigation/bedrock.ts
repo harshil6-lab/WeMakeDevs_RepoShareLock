@@ -1,4 +1,5 @@
 import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
+import { fromTemporaryCredentials } from "@aws-sdk/credential-providers";
 
 export type BedrockModel = {
   converse: (systemPrompt: string, userPrompt: string, maxTokens: number) => Promise<string>;
@@ -7,13 +8,33 @@ export type BedrockModel = {
 export type BedrockModelOptions = {
   modelId: string;
   region?: string;
+  /** When set, the client assumes this role instead of using the default chain. */
+  roleArn?: string;
   client?: Pick<BedrockRuntimeClient, "send">;
 };
 
+/** Session name used for the cross-account Bedrock role assumption. */
+const bedrockRoleSessionName = "reposherlock-bedrock";
+
+/**
+ * Builds the Bedrock Runtime client. With no role ARN it keeps the default AWS
+ * credential chain; with a role ARN it assumes that role (in the Bedrock
+ * account) and uses the assumed credentials for the runtime call.
+ */
+function createBedrockClient(options: BedrockModelOptions): BedrockRuntimeClient {
+  const clientConfig = options.region === undefined ? {} : { region: options.region };
+  if (!options.roleArn) return new BedrockRuntimeClient(clientConfig);
+  return new BedrockRuntimeClient({
+    ...clientConfig,
+    credentials: fromTemporaryCredentials({
+      params: { RoleArn: options.roleArn, RoleSessionName: bedrockRoleSessionName },
+      clientConfig,
+    }),
+  });
+}
+
 export function createBedrockModel(options: BedrockModelOptions): BedrockModel {
-  const client =
-    options.client ??
-    new BedrockRuntimeClient(options.region === undefined ? {} : { region: options.region });
+  const client = options.client ?? createBedrockClient(options);
   return {
     converse: async (systemPrompt, userPrompt, maxTokens) => {
       const response = await client.send(
@@ -24,7 +45,15 @@ export function createBedrockModel(options: BedrockModelOptions): BedrockModel {
           inferenceConfig: { maxTokens },
         }),
       );
-      const text = response.output?.message?.content?.find((item) => item.text)?.text;
+      // Converse returns the answer as an ordered list of content blocks, and a
+      // model may split any phase response across several text blocks. Returning
+      // only the first block can drop the claims envelope from HYPOTHESIZE or
+      // SYNTHESIZE, which surfaces as "claims: Required (undefined)". Keep every
+      // text block in order so ask() and parseModelJson share one response path.
+      const text = (response.output?.message?.content ?? [])
+        .map((item) => item.text)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+        .join("\n");
       if (!text) throw new Error("Bedrock returned no text content");
       return text;
     },
@@ -42,12 +71,23 @@ function resolveMaxRequestTokens(value: string | undefined): number {
   return Math.min(Math.max(Math.floor(parsed), minBedrockRequestTokens), maxBedrockRequestTokens);
 }
 
-export function loadBedrockConfig(env: Record<string, string | undefined> = {}) {
+export type BedrockConfig = {
+  modelId: string;
+  region: string;
+  maxTokens: number;
+  /** Optional cross-account role assumed for Bedrock invocation. */
+  roleArn?: string;
+};
+
+export function loadBedrockConfig(env: Record<string, string | undefined> = {}): BedrockConfig {
   const modelId = env["REPOSHERLOCK_BEDROCK_MODEL_ID"];
   if (!modelId) throw new Error("REPOSHERLOCK_BEDROCK_MODEL_ID is required");
-  return {
+  const config: BedrockConfig = {
     modelId,
     region: env["AWS_REGION"] ?? "ap-south-1",
     maxTokens: resolveMaxRequestTokens(env["REPOSHERLOCK_BEDROCK_MAX_TOKENS"]),
   };
+  const roleArn = env["REPOSHERLOCK_BEDROCK_ROLE_ARN"];
+  if (roleArn) config.roleArn = roleArn;
+  return config;
 }

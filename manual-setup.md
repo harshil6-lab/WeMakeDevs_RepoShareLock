@@ -487,3 +487,11 @@ aws logs tail /aws/lambda/reposherlock-dev --follow --region ap-south-1
 aws logs filter-log-events --log-group-name /aws/lambda/reposherlock-dev --filter-pattern investigationId --region ap-south-1
 aws cloudformation describe-stack-events --stack-name reposherlock-dev-app --region ap-south-1
 ```
+
+### `INVALID_AGENT_RESULT` on SYNTHESIZE
+
+A Zod `invalid_type` at `claims` means no schema-valid claims envelope reached validation. Trace the boundary first: `createBedrockModel` must return every text block of the Converse response (`output.message.content` is an ordered `ContentBlock[]`), because the SYNTHESIZE answer can sit in a later block than a reasoning block. Then confirm the forwarded text contains `{"claims":[{"text":"...","evidenceIds":["file:<path>:<start>-<end>"]}]}` with verbatim ids from `availableEvidence`. A genuinely claim-less response still fails.
+
+### `timeout` after a successful SYNTHESIZE
+
+A record that ends `status=timeout` while SYNTHESIZE logged `success=true` is the expected outcome when the run exceeds the 30 s bound. The late continuation no longer writes progress, so a following `storage_operation_failed` / `ConditionalCheckFailedException` on `write investigation progress` should be gone. If it still appears, the deployed bundle predates Packet 14: rebuild with `npm run build:aws`. An `investigation_completion_skipped` or `investigation_failure_skipped` log line is normal and means the single terminal state was already recorded.

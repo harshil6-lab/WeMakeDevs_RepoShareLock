@@ -98,3 +98,16 @@
 - Add a monthly cost budget and rely on request-driven Lambda plus on-demand DynamoDB instead of any always-on infrastructure.
 - Provide `deploy`/`rollback` in both PowerShell and bash. The scripts read stack outputs, so the deployment order and resource names are not manual steps and a redeploy is repeatable.
 - Do not enforce Cognito authentication in the API itself for the hackathon demo; the existing GitHub session boundary is the active login, and Cognito is provisioned as the approved authentication configuration for a later step. Changing enforcement would alter the existing API architecture.
+
+## Packet 13 synthesis extraction decisions
+
+- Read every Converse content block, not just the first. `ConverseCommand` returns `output.message.content` as an ordered `ContentBlock[]`; the SYNTHESIZE answer arrived in a later text block while the first block held reasoning JSON without `claims`. The adapter previously used `.find((item) => item.text)?.text` and forwarded only the first block, so `parseModelJson` never received the envelope and Zod failed with `invalid_type / claims: Required`. `createBedrockModel` now joins every text block in order.
+- Keep validation strict. The parser parses candidates as-is and a candidate must satisfy `claimsSchema` (non-empty claim text, 1-8 evidence ids); a response with no schema-valid candidate still fails the investigation, and nothing is repaired, defaulted or fabricated.
+- The parser also accepts a JSON string nested in an object or array value, because the model may double-encode its answer. HYPOTHESIZE keeps `claimsOutputContract` unchanged.
+
+## Packet 14 timeout and terminal-state decisions
+
+- Cancel the abandoned run instead of relying on `Promise.race` alone. The race rejects at the 30 s bound but the in-flight `run()` keeps executing, and its late `stage()` writes lost the `status = running` condition once the timeout path had persisted `timeout`, which surfaced as `storage_operation_failed` / `ConditionalCheckFailedException`. `runInvestigation` now sets a `cancelled` flag from the timeout and `stage()` returns early, so no progress write is issued after the terminal transition. The timeout itself (30 s cap) is unchanged and is not raised.
+- Treat a lost `status = running` condition as a benign terminal-state outcome rather than an error. `updateProgress` drops the stale write, and `complete`/`fail` report the loss with a boolean so the worker never overwrites the single terminal state and never escalates a stale write into `INTERNAL_ERROR`. The conditions are kept, not removed, so optimistic concurrency is preserved.
+- Keep exactly one terminal state (`completed` / `failed` / `timeout`). Only the first conditioned write wins; the worker logs `investigation_completion_skipped` or `investigation_failure_skipped` when it loses and returns without changing the record.
+- Attach a rejection handler to the abandoned run. The loser of the race can still reject after the timeout has been reported, so swallowing that rejection keeps a late failure from becoming an unhandled rejection.

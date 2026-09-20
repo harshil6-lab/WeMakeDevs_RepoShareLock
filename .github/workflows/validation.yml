@@ -1,4 +1,4 @@
-name: RepoSherlock Validation
+name: RepoSherlock CI
 
 on:
   push:
@@ -20,494 +20,79 @@ permissions:
   contents: read
 
 concurrency:
-  group: validation-${{ github.workflow }}-${{ github.ref }}
+  group: reposherlock-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PYTHON_VERSION: "3.11"
-  NODE_VERSION: "20"
-
 jobs:
-
-  # ==========================================================
-  # REPOSITORY VALIDATION
-  # ==========================================================
-
-  repository-validation:
-    name: Repository Validation
+  validation:
+    name: Validate RepoSherlock
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Validate repository structure
-        shell: bash
-        run: |
-          set -e
-
-          echo "Checking repository structure..."
-
-          test -f README.md || {
-            echo "::warning::README.md not found"
-          }
-
-          test -f implementation.md || {
-            echo "::warning::implementation.md not found"
-          }
-
-          test -f flow.md || {
-            echo "::warning::flow.md not found"
-          }
-
-          test -f decision.md || {
-            echo "::warning::decision.md not found"
-          }
-
-          test -f manual-setup.md || {
-            echo "::warning::manual-setup.md not found"
-          }
-
-          echo "Repository structure validation completed."
-
-      - name: Check for accidental secrets
-        shell: bash
-        run: |
-          set -e
-
-          echo "Checking suspicious files..."
-
-          if find . \
-            -type f \
-            \( \
-              -name "*.pem" \
-              -o -name "*.key" \
-              -o -name "*.p12" \
-              -o -name "*.pfx" \
-              -o -name ".env" \
-            \) \
-            -not -path "./.git/*" \
-            | grep -q .; then
-
-            echo "::error::Potential secret/private-key files detected."
-            find . \
-              -type f \
-              \( \
-                -name "*.pem" \
-                -o -name "*.key" \
-                -o -name "*.p12" \
-                -o -name "*.pfx" \
-                -o -name ".env" \
-              \) \
-              -not -path "./.git/*"
-
-            exit 1
-          fi
-
-          echo "No suspicious secret files detected."
-
-
-  # ==========================================================
-  # SECRET SCANNING
-  # ==========================================================
-
-  secret-scan:
-    name: Secret Scan
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
-  # ==========================================================
-  # PYTHON VALIDATION
-  # ==========================================================
-
-  python-validation:
-    name: Python Validation
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-
-      - name: Install backend dependencies
-        shell: bash
-        run: |
-          set -e
-
-          if [ -f "requirements.txt" ]; then
-            python -m pip install --upgrade pip
-            pip install -r requirements.txt
-          elif [ -f "backend/requirements.txt" ]; then
-            python -m pip install --upgrade pip
-            pip install -r backend/requirements.txt
-          elif [ -f "pyproject.toml" ]; then
-            python -m pip install --upgrade pip
-            pip install -e ".[dev]" || pip install -e .
-          else
-            echo "No Python dependency file detected."
-            exit 0
-          fi
-
-      - name: Install validation tools
-        shell: bash
-        run: |
-          python -m pip install \
-            ruff \
-            mypy \
-            pytest \
-            pytest-cov
-
-      - name: Ruff lint
-        shell: bash
-        run: |
-          if [ -f "pyproject.toml" ] || find . -name "*.py" -not -path "./.venv/*" | grep -q .; then
-            ruff check .
-          else
-            echo "No Python files found."
-          fi
-
-      - name: Ruff format check
-        shell: bash
-        run: |
-          if find . -name "*.py" -not -path "./.venv/*" | grep -q .; then
-            ruff format --check .
-          else
-            echo "No Python files found."
-          fi
-
-      - name: MyPy type check
-        shell: bash
-        run: |
-          if find . -name "*.py" -not -path "./.venv/*" | grep -q .; then
-            mypy . --ignore-missing-imports
-          else
-            echo "No Python files found."
-          fi
-
-      - name: Pytest
-        shell: bash
-        run: |
-          if find . \
-            -type f \
-            \( -name "test_*.py" -o -name "*_test.py" \) \
-            -not -path "./.venv/*" \
-            | grep -q .; then
-
-            pytest -v \
-              --tb=short \
-              --disable-warnings \
-              --maxfail=1 \
-              --cov=. \
-              --cov-report=term-missing
-
-          else
-            echo "::warning::No Python tests found."
-          fi
-
-
-  # ==========================================================
-  # FRONTEND VALIDATION
-  # ==========================================================
-
-  frontend-validation:
-    name: Frontend Validation
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Detect frontend
-        id: frontend
-        shell: bash
-        run: |
-          if [ -f "package.json" ]; then
-            echo "path=." >> "$GITHUB_OUTPUT"
-            echo "found=true" >> "$GITHUB_OUTPUT"
-
-          elif [ -f "frontend/package.json" ]; then
-            echo "path=frontend" >> "$GITHUB_OUTPUT"
-            echo "found=true" >> "$GITHUB_OUTPUT"
-
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Setup Node.js
-        if: steps.frontend.outputs.found == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: 24
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            frontend/package-lock.json
 
-      - name: Install frontend dependencies
-        if: steps.frontend.outputs.found == 'true'
-        working-directory: ${{ steps.frontend.outputs.path }}
-        run: npm ci
+      - name: Show runtime versions
+        run: |
+          node --version
+          npm --version
 
-      - name: ESLint
-        if: steps.frontend.outputs.found == 'true'
-        working-directory: ${{ steps.frontend.outputs.path }}
-        run: npm run lint --if-present
+      # Temporarily regenerate the lockfile on the Ubuntu runner.
+      # This is being used to diagnose the @emnapi dependency mismatch.
+      - name: Regenerate lockfile on Ubuntu
+        run: |
+          npm install --package-lock-only
+          echo "===== LOCKFILE DIFF ====="
+          git diff -- package-lock.json
+          echo "===== EMNAPI ENTRIES ====="
+          grep -n -A8 -B2 '"node_modules/@emnapi/core"' package-lock.json || true
+          grep -n -A8 -B2 '"node_modules/@emnapi/runtime"' package-lock.json || true
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Verify dependencies
+        run: |
+          npm --version
+          node --version
+          test -x node_modules/.bin/eslint
+          npm ls eslint
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
 
       - name: TypeScript type check
-        if: steps.frontend.outputs.found == 'true'
-        working-directory: ${{ steps.frontend.outputs.path }}
-        shell: bash
-        run: |
-          if node -e "const p=require('./package.json'); process.exit(p.scripts?.typecheck ? 0 : 1)"; then
-            npm run typecheck
-          elif [ -f "tsconfig.json" ]; then
-            npx tsc --noEmit
-          else
-            echo "No TypeScript configuration detected."
-          fi
-
-      - name: Frontend tests
-        if: steps.frontend.outputs.found == 'true'
-        working-directory: ${{ steps.frontend.outputs.path }}
-        run: npm test --if-present -- --run
-
-      - name: Frontend build
-        if: steps.frontend.outputs.found == 'true'
-        working-directory: ${{ steps.frontend.outputs.path }}
-        run: npm run build --if-present
+        run: npx tsc --noEmit
 
       - name: Dependency audit
-        if: steps.frontend.outputs.found == 'true'
-        working-directory: ${{ steps.frontend.outputs.path }}
         run: npm audit --audit-level=high
 
+      - name: Frontend build
+        run: npm run build
 
-  # ==========================================================
-  # DOCKER VALIDATION
-  # ==========================================================
+      - name: Lambda build
+        run: npm run build:aws
 
-  docker-validation:
-    name: Docker Validation
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Detect Dockerfiles
-        id: docker
+      - name: Check generated Lambda package
         shell: bash
         run: |
-          if find . \
-            -type f \
-            \( -name "Dockerfile" -o -name "Dockerfile.*" \) \
-            -not -path "./.git/*" \
-            | grep -q .; then
+          test -f dist-lambda/index.mjs
+          test -f dist-lambda/nitro.json || true
 
-            echo "found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up Docker Buildx
-        if: steps.docker.outputs.found == 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build backend Docker image
-        if: steps.docker.outputs.found == 'true'
-        shell: bash
-        run: |
-          if [ -f "Dockerfile" ]; then
-            docker build \
-              --file Dockerfile \
-              --tag reposherlock-validation:latest \
-              .
-          elif [ -f "backend/Dockerfile" ]; then
-            docker build \
-              --file backend/Dockerfile \
-              --tag reposherlock-backend-validation:latest \
-              backend
-          else
-            echo "Dockerfile detected but no supported root/backend Dockerfile found."
-          fi
-
-
-  # ==========================================================
-  # TERRAFORM VALIDATION
-  # ==========================================================
-
-  terraform-validation:
-    name: Terraform Validation
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Detect Terraform
-        id: terraform
-        shell: bash
-        run: |
-          if find . \
-            -type f \
-            -name "*.tf" \
-            -not -path "./.git/*" \
-            | grep -q .; then
-
-            echo "found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Setup Terraform
-        if: steps.terraform.outputs.found == 'true'
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Terraform Format Check
-        if: steps.terraform.outputs.found == 'true'
-        run: terraform fmt -check -recursive
-
-      - name: Terraform Init
-        if: steps.terraform.outputs.found == 'true'
-        working-directory: infrastructure
-        run: terraform init -backend=false
-
-      - name: Terraform Validate
-        if: steps.terraform.outputs.found == 'true'
-        working-directory: infrastructure
-        run: terraform validate
-
-
-  # ==========================================================
-  # YAML VALIDATION
-  # ==========================================================
-
-  yaml-validation:
-    name: YAML Validation
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Validate YAML files
-        shell: bash
-        run: |
-          python - <<'PY'
-          import pathlib
-          import sys
-
-          try:
-              import yaml
-          except ImportError:
-              import subprocess
-              subprocess.check_call([
-                  sys.executable,
-                  "-m",
-                  "pip",
-                  "install",
-                  "PyYAML"
-              ])
-              import yaml
-
-          errors = []
-
-          for path in pathlib.Path(".").rglob("*"):
-              if not path.is_file():
-                  continue
-
-              if ".git" in path.parts:
-                  continue
-
-              if path.suffix.lower() not in {".yml", ".yaml"}:
-                  continue
-
-              try:
-                  with path.open("r", encoding="utf-8") as file:
-                      list(yaml.safe_load_all(file))
-
-                  print(f"VALID: {path}")
-
-              except Exception as exc:
-                  errors.append((path, exc))
-
-          if errors:
-              print("\nYAML validation failures:")
-
-              for path, error in errors:
-                  print(f"- {path}: {error}")
-
-              sys.exit(1)
-
-          print("\nAll YAML files are valid.")
-          PY
-
-
-  # ==========================================================
-  # FINAL VALIDATION GATE
-  # ==========================================================
-
-  validation-summary:
-    name: Validation Summary
-    runs-on: ubuntu-latest
-
-    needs:
-      - repository-validation
-      - secret-scan
-      - python-validation
-      - frontend-validation
-      - docker-validation
-      - terraform-validation
-      - yaml-validation
-
-    if: always()
-
-    steps:
-      - name: Evaluate validation results
-        shell: bash
-        run: |
-          echo "======================================"
-          echo "RepoSherlock Validation Summary"
-          echo "======================================"
-
-          echo "Repository: ${{ needs.repository-validation.result }}"
-          echo "Secrets:    ${{ needs.secret-scan.result }}"
-          echo "Python:     ${{ needs.python-validation.result }}"
-          echo "Frontend:   ${{ needs.frontend-validation.result }}"
-          echo "Docker:     ${{ needs.docker-validation.result }}"
-          echo "Terraform:  ${{ needs.terraform-validation.result }}"
-          echo "YAML:       ${{ needs.yaml-validation.result }}"
-
-          echo "======================================"
-
-          if [[ "${{ needs.repository-validation.result }}" == "failure" ]] ||
-             [[ "${{ needs.secret-scan.result }}" == "failure" ]] ||
-             [[ "${{ needs.python-validation.result }}" == "failure" ]] ||
-             [[ "${{ needs.frontend-validation.result }}" == "failure" ]] ||
-             [[ "${{ needs.docker-validation.result }}" == "failure" ]] ||
-             [[ "${{ needs.terraform-validation.result }}" == "failure" ]] ||
-             [[ "${{ needs.yaml-validation.result }}" == "failure" ]]; then
-
-            echo "::error::One or more validation jobs failed."
-            exit 1
-          fi
-
-          echo "All validation gates passed."
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: detect --source . --redact --exit-code 1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

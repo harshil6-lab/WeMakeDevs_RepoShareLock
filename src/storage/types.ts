@@ -171,7 +171,7 @@ export type RepositoryStore = {
       completedAt: Timestamp,
       durationMs: number,
       updatedAt: Timestamp,
-    ) => Promise<void>;
+    ) => Promise<boolean>;
     fail: (
       investigationId: string,
       status: "failed" | "timeout",
@@ -180,7 +180,7 @@ export type RepositoryStore = {
       completedAt: Timestamp,
       durationMs: number,
       updatedAt: Timestamp,
-    ) => Promise<void>;
+    ) => Promise<boolean>;
   };
   evidence: {
     put: (record: EvidenceRecord) => Promise<void>;
