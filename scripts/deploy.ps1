@@ -17,6 +17,7 @@
   ./scripts/deploy.ps1 -Region ap-south-1 -BudgetEmail you@example.com
 #>
 param(
+  [string]$AwsProfile = "reposherlock",
   [string]$Region = "ap-south-1",
   [string]$ProjectName = "reposherlock",
   [string]$EnvironmentName = "dev",
@@ -24,10 +25,13 @@ param(
   [string]$BedrockModelArns = "arn:aws:bedrock:ap-south-1::foundation-model/nvidia.nemotron-nano-12b-v2",
   [string]$GitHubToken = $env:REPOSHERLOCK_GITHUB_TOKEN,
   [string]$GitHubSecretName = "reposherlock/github",
+  [string]$GitHubOAuthSecretName = "reposherlock/github-oauth",
+  [string]$GitHubOAuthSecretString = $env:REPOSHERLOCK_GITHUB_OAUTH_SECRET,
   [string]$BudgetEmail = "",
   [string]$ArtifactsBucketName = "",
   [string]$FrontendBucketName = "",
   [string]$FrontendBaseUrl = "http://localhost:5173",
+  [string]$CognitoCallbackBaseUrl = "http://localhost:5173",
   [string]$LambdaCodeS3Key = ""
 )
 
@@ -39,12 +43,12 @@ $lambdaPackageDir = Join-Path $root "dist-lambda"
 $lambdaZip = Join-Path $root "dist-lambda.zip"
 
 function Invoke-Aws([string[]]$Arguments) {
-  & aws @Arguments
+  & aws --profile $AwsProfile @Arguments
   if ($LASTEXITCODE -ne 0) { throw "aws $($Arguments -join ' ') failed with exit code $LASTEXITCODE" }
 }
 
 function Get-StackOutput([string]$StackName, [string]$OutputKey) {
-  $value = & aws cloudformation describe-stacks --stack-name $StackName --region $Region `
+  $value = & aws --profile $AwsProfile cloudformation describe-stacks --stack-name $StackName --region $Region `
     --query "Stacks[0].Outputs[?OutputKey=='$OutputKey'].OutputValue" --output text
   if ($LASTEXITCODE -ne 0) { throw "Could not read output $OutputKey from $StackName" }
   return $value.Trim()
@@ -85,7 +89,7 @@ $tableName = Get-StackOutput $foundationStack "InvestigationsTableName"
 $roleArn = Get-StackOutput $foundationStack "LambdaExecutionRoleArn"
 $apiId = Get-StackOutput $foundationStack "ApiId"
 
-Write-Host "==> 2/4 Storing the GitHub token in Secrets Manager ($GitHubSecretName)"
+Write-Host "==> 2/5 Storing the GitHub token in Secrets Manager ($GitHubSecretName)"
 if ($GitHubToken) {
   $secretString = '{"token":"' + $GitHubToken.Replace('"', '\"') + '"}'
   Invoke-Aws @("secretsmanager", "put-secret-value", "--secret-id", $GitHubSecretName, "--region", $Region, "--secret-string", $secretString)
@@ -93,7 +97,14 @@ if ($GitHubToken) {
   Write-Warning "No GitHub token supplied. Set `$env:REPOSHERLOCK_GITHUB_TOKEN or pass -GitHubToken, or the API stack will fail to resolve the secret."
 }
 
-Write-Host "==> 3/4 Building and uploading the Lambda package"
+Write-Host "==> 3/5 Storing the GitHub OAuth credentials in Secrets Manager ($GitHubOAuthSecretName)"
+if ($GitHubOAuthSecretString) {
+  Invoke-Aws @("secretsmanager", "put-secret-value", "--secret-id", $GitHubOAuthSecretName, "--region", $Region, "--secret-string", $GitHubOAuthSecretString)
+} else {
+  Write-Warning "No GitHub OAuth secret supplied. Set `$env:REPOSHERLOCK_GITHUB_OAUTH_SECRET (JSON with clientId+clientSecret) or pass -GitHubOAuthSecretString, or the GitHub identity provider will not be created."
+}
+
+Write-Host "==> 4/5 Building and uploading the Lambda package"
 Push-Location $root
 try {
   & npm.cmd run build:aws
@@ -105,18 +116,20 @@ if (Test-Path $lambdaZip) { Remove-Item -LiteralPath $lambdaZip -Force }
 [System.IO.Compression.ZipFile]::CreateFromDirectory($lambdaPackageDir, $lambdaZip)
 Invoke-Aws @("s3", "cp", $lambdaZip, "s3://$artifactsBucket/$LambdaCodeS3Key", "--region", $Region)
 
-Write-Host "==> 4/4 Deploying application stack $appStack"
+Write-Host "==> 5/5 Deploying application stack $appStack"
 $appParameters = @(
   "ProjectName=$ProjectName",
   "EnvironmentName=$EnvironmentName",
   "ApiId=$apiId",
   "ArtifactsBucketName=$artifactsBucket",
   "FrontendBaseUrl=$FrontendBaseUrl",
+  "CognitoCallbackBaseUrl=$CognitoCallbackBaseUrl",
   "InvestigationsTableName=$tableName",
   "LambdaRoleArn=$roleArn",
   "LambdaCodeS3Key=$LambdaCodeS3Key",
   "BedrockModelId=$BedrockModelId",
-  "GitHubSecretName=$GitHubSecretName"
+  "GitHubSecretName=$GitHubSecretName",
+  "GitHubOAuthSecretName=$GitHubOAuthSecretName"
 )
 if ($BudgetEmail) { $appParameters += "BudgetEmail=$BudgetEmail" }
 $appArgs = @(

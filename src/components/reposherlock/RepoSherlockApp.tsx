@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Bell,
@@ -18,7 +17,6 @@ import {
   History,
   Home,
   Layers3,
-  LockKeyhole,
   Menu,
   Network,
   PanelLeftClose,
@@ -30,8 +28,7 @@ import {
   Star,
   X,
   Zap,
-  Eye,
-  EyeOff,
+
   ChevronRight,
   ExternalLink,
   Maximize2,
@@ -39,6 +36,7 @@ import {
   FileText,
   UserPlus,
   Key,
+  LogOut,
   ChevronUp,
   type LucideIcon,
 } from "lucide-react";
@@ -61,6 +59,7 @@ import {
   type IssueView,
   type RepositoryView,
 } from "./api-models";
+import { getSession, signOut, startAuthFlow, type AuthFlow, type AuthSession } from "@/auth/client";
 
 type Screen =
   | "entry"
@@ -165,9 +164,7 @@ function Entry({ onStart, onHow }: { onStart: () => void; onHow: () => void }) {
     >
       <header className="entry-nav">
         <Logo />
-        <span className="mini-proof">
-          <ShieldCheck size={14} /> Mock prototype · No repository access
-        </span>
+
       </header>
       <div
         className="software-sky"
@@ -239,140 +236,80 @@ function Entry({ onStart, onHow }: { onStart: () => void; onHow: () => void }) {
 
 function Login({
   onBack,
-  onSuccess,
-  onError,
+  configured,
 }: {
   onBack: () => void;
-  onSuccess: () => void;
-  onError: (message: string) => void;
+  configured: boolean;
 }) {
-  const [passwordFocus, setPasswordFocus] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [state, setState] = useState<"normal" | "loading" | "error" | "success">("normal");
-  const [email, setEmail] = useState("alex@acme.dev");
-  const signIn = async () => {
-    setState("loading");
-    try {
-      await apiClient.createSession();
-      setState("success");
-      await wait(250);
-      onSuccess();
-    } catch (error) {
-      setState("error");
-      onError(errorMessage(error));
-    }
+  const [githubState, setGithubState] = useState<"idle" | "loading">("idle");
+  const [cognitoState, setCognitoState] = useState<"idle" | "loading">("idle");
+
+  /**
+   * When the deployment's Cognito user pool has a GitHub identity provider
+   * configured, the button launches the hosted UI deep-linked to GH so the
+   * user skips Cognito's provider-selection screen entirely.
+   */
+  const handleGitHub = () => {
+    if (!configured) return;
+    setGithubState("loading");
+    startAuthFlow("signin", undefined, "GH");
   };
+
+  const handleCognito = () => {
+    if (!configured) return;
+    setCognitoState("loading");
+    startAuthFlow("signin");
+  };
+
   return (
     <main className="login-scene">
       <Button variant="ghost" className="back-button" onClick={onBack}>
         <ArrowLeft /> Back
       </Button>
-      <div className="login-cast" aria-hidden="true">
-        <Character
-          mood={
-            passwordFocus
-              ? "shy"
-              : state === "error"
-                ? "oops"
-                : state === "success"
-                  ? "happy"
-                  : "curious"
-          }
-          className="cast-one"
-        />
-        <Character mood={passwordFocus ? "shy" : "sleepy"} className="cast-two" />
-        <Character
-          mood={passwordFocus ? "shy" : state === "loading" ? "detective" : "coffee"}
-          className="cast-three"
-        />
-        <Character mood={passwordFocus ? "shy" : "detective"} className="cast-four" />
-      </div>
       <section className="login-card">
         <Logo />
-        <p className="eyebrow">YOUR INVESTIGATION DESK</p>
-        <h1>Welcome back, detective.</h1>
-        <p>There are mysteries waiting in the codebase.</p>
-        <Button className="github-button" size="lg" onClick={signIn} disabled={state === "loading"}>
-          <Github /> Continue with GitHub
-        </Button>
-        <div className="divider">
-          <span>or</span>
-        </div>
-        <label>
-          Email
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
-        </label>
-        <label className="password-field">
-          <span className="pw-label">Password</span>
-          <Input
-            type={showPassword ? "text" : "password"}
-            defaultValue="evidencefirst"
-            onFocus={() => setPasswordFocus(true)}
-            onBlur={() => setPasswordFocus(false)}
-          />
-          <button
-            type="button"
-            className="pw-toggle"
-            onClick={() => setShowPassword((v) => !v)}
-            aria-label={showPassword ? "Hide password" : "Show password"}
-          >
-            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-        </label>
-        {state === "error" && (
-          <p className="form-error">
-            <AlertTriangle size={16} /> The authentication connection was interrupted.
-          </p>
-        )}
-        {state === "success" && (
-          <p className="form-success">
-            <Check size={16} /> Identity confirmed. Opening the case board...
-          </p>
-        )}
-        <Button size="lg" onClick={signIn} disabled={state === "loading"}>
-          {state === "loading" ? (
+        <p className="eyebrow">INVESTIGATE YOUR CODEBASE</p>
+        <h1>Evidence-backed AI for repos.</h1>
+        <p>Trace root causes, verify evidence, understand impact.</p>
+        <button
+          type="button"
+          className="auth-button github-button"
+          disabled={!configured}
+          aria-disabled={!configured}
+          onClick={handleGitHub}
+        >
+          {githubState === "loading" ? (
             <>
-              <Search className="investigate-spin" /> Investigating credentials...
-            </>
-          ) : state === "success" ? (
-            <>
-              <Check /> Welcome back
+              <Search className="investigate-spin" /> Connecting...
             </>
           ) : (
-            "Sign in"
+            <>
+              <Github /> Continue with GitHub
+            </>
           )}
-        </Button>
-        <div className="login-links">
-          <button
-            type="button"
-            onClick={() => {
-              setState("normal");
-              alert("Account creation flow would open a mock signup wizard here.");
-            }}
-          >
-            Create account
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setState("normal");
-              alert("Password reset email would be sent to alex@acme.dev in the full product.");
-            }}
-          >
-            Forgot password?
-          </button>
-        </div>
-        <button type="button" className="error-demo" onClick={() => setState("error")}>
-          Preview invalid login
+        </button>
+        <button
+          type="button"
+          className="auth-button cognito-button"
+          disabled={!configured}
+          aria-disabled={!configured}
+          onClick={handleCognito}
+        >
+          {cognitoState === "loading" ? (
+            <>
+              <Search className="investigate-spin" /> Opening secure sign-in...
+            </>
+          ) : (
+            "Continue with Cognito"
+          )}
         </button>
       </section>
       <p className="login-footer">
-        Your code stays yours. RepoSherlock investigates; it doesn't rewrite your repository.
+        Your code stays yours. RepoSherlock investigates; it doesn&apos;t rewrite your repository.
       </p>
     </main>
   );
 }
-
 const nav = [
   ["Home", Home],
   ["Repositories", Boxes],
@@ -385,10 +322,14 @@ const nav = [
 function AppShell({
   screen,
   setScreen,
+  user,
+  onSignOut,
   children,
 }: {
   screen: Screen;
   setScreen: (s: Screen) => void;
+  user?: AuthSession["user"];
+  onSignOut: () => void;
   children: ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -434,12 +375,14 @@ function AppShell({
           ))}
         </nav>
         <div className="profile">
-          <div className="avatar">AC</div>
+          <div className="avatar">{(user?.email ?? "R").slice(0, 2).toUpperCase()}</div>
           <div>
-            <strong>Alex Chen</strong>
-            <small>Pro detective</small>
+            <strong>{user?.email ?? "Signed in"}</strong>
+            <small>Investigator</small>
           </div>
-          <ChevronDown />
+          <Button variant="ghost" size="icon" aria-label="Sign out" onClick={onSignOut}>
+            <LogOut />
+          </Button>
         </div>
       </aside>
       <div className="mobile-bar">
@@ -2014,6 +1957,7 @@ function PricingModal({ open, onClose }: { open: boolean; onClose: () => void })
 
 export function RepoSherlockApp() {
   const [screen, setScreen] = useState<Screen>("entry");
+  const [session, setSession] = useState<AuthSession>();
   const [tab, setTab] = useState<WorkspaceTab>("overview");
   const [drawer, setDrawer] = useState(false);
   const [pricing, setPricing] = useState(false);
@@ -2027,6 +1971,35 @@ export function RepoSherlockApp() {
   const [investigationResult, setInvestigationResult] = useState<ApiInvestigation>();
   const [investigationEvidence, setInvestigationEvidence] = useState<EvidenceView[]>([]);
   const [appError, setAppError] = useState<string>();
+
+  useEffect(() => {
+    void getSession().then(setSession);
+  }, []);
+
+  // Protected screens are unreachable without a verified session, and a
+  // returning Cognito callback restores the application on its own.
+  useEffect(() => {
+    if (!session) return;
+    const publicScreens: Screen[] = ["entry", "login", "how-it-works"];
+    if (!session.authenticated && !publicScreens.includes(screen)) setScreen("login");
+    if (session.authenticated && publicScreens.includes(screen) && screen !== "how-it-works")
+      setScreen("dashboard");
+  }, [screen, session]);
+
+  const handleSignOut = useCallback(() => {
+    void signOut().then(() => {
+      setSession({ authenticated: false, configured: true, user: null });
+      setRepositories([]);
+      setSelectedRepository(undefined);
+      setSelectedIssue(undefined);
+      setInvestigationId(undefined);
+      setInvestigationResult(undefined);
+      setInvestigationEvidence([]);
+      setAppError(undefined);
+      setScreen("login");
+    });
+  }, []);
+
   useEffect(() => {
     if (
       (screen === "dashboard" || screen === "repositories") &&
@@ -2081,11 +2054,7 @@ export function RepoSherlockApp() {
         return (
           <Login
             onBack={() => setScreen("entry")}
-            onSuccess={() => {
-              setAppError(undefined);
-              setScreen("dashboard");
-            }}
-            onError={setAppError}
+            configured={Boolean(session?.configured)}
           />
         );
       case "how-it-works":
@@ -2161,6 +2130,7 @@ export function RepoSherlockApp() {
     }
   }, [
     screen,
+    session?.configured,
     tab,
     repositories,
     repositoriesLoading,
@@ -2176,7 +2146,12 @@ export function RepoSherlockApp() {
   return (
     <>
       {inApp ? (
-        <AppShell screen={screen} setScreen={setScreen}>
+        <AppShell
+          screen={screen}
+          setScreen={setScreen}
+          user={session?.user ?? null}
+          onSignOut={handleSignOut}
+        >
           {content}
           <button className="pricing-chip" type="button" onClick={() => setPricing(true)}>
             <Sparkles /> Plans

@@ -5,8 +5,8 @@ import type { CreateInvestigationRequest, Investigation, InvestigationStatus } f
 import type { InvestigationRecord, RepositoryStore } from "../storage/types";
 
 export type InvestigationService = {
-  create: (request: CreateInvestigationRequest) => Promise<Investigation>;
-  get: (investigationId: string) => Promise<Investigation>;
+  create: (userId: string, request: CreateInvestigationRequest) => Promise<Investigation>;
+  get: (userId: string, investigationId: string) => Promise<Investigation>;
 };
 
 export type InvestigationServiceOptions = {
@@ -39,9 +39,10 @@ export function createInvestigationService(
   options: InvestigationServiceOptions = {},
 ): InvestigationService {
   const investigations = new Map<string, Investigation>();
+  const owners = new Map<string, string>();
 
   return {
-    async create(request) {
+    async create(userId, request) {
       const now = new Date().toISOString();
       const investigation: Investigation = {
         investigationId: randomUUID(),
@@ -55,6 +56,7 @@ export function createInvestigationService(
       if (options.storage)
         await options.storage.investigations.create({
           investigationId: investigation.investigationId,
+          userId,
           repositoryId: investigation.repositoryId,
           issueNumber: investigation.issueNumber,
           status: investigation.status,
@@ -63,6 +65,7 @@ export function createInvestigationService(
           updatedAt: investigation.updatedAt,
         });
       investigations.set(investigation.investigationId, investigation);
+      owners.set(investigation.investigationId, userId);
       // The dispatch call itself is awaited so a serverless runtime cannot
       // freeze before the asynchronous invoke is accepted. The investigation
       // still runs outside this request, so HTTP latency stays independent of
@@ -70,13 +73,19 @@ export function createInvestigationService(
       await Promise.resolve(worker.enqueue(investigation)).catch(() => undefined);
       return investigation;
     },
-    async get(investigationId) {
+    async get(userId, investigationId) {
       if (options.storage) {
         const record = await options.storage.investigations.get(investigationId);
-        if (record) return fromRecord(record);
+        if (record) {
+          // Ownership is part of the lookup: a request for somebody else's
+          // investigation is indistinguishable from an unknown id.
+          if (record.userId !== userId)
+            throw new ApiError(404, "INVESTIGATION_NOT_FOUND", "Investigation was not found.");
+          return fromRecord(record);
+        }
       }
       const investigation = investigations.get(investigationId);
-      if (!investigation)
+      if (!investigation || owners.get(investigationId) !== userId)
         throw new ApiError(404, "INVESTIGATION_NOT_FOUND", "Investigation was not found.");
       return investigation;
     },

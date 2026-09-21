@@ -21,6 +21,7 @@ import {
 import { createGoldenGitHubClient } from "./golden-github-client";
 import { createInMemoryArtifactRepository, createInMemoryRepositoryStore } from "./in-memory-store";
 import { createRecordingBedrockModel } from "./golden-model";
+import { testAuth } from "../helpers/auth";
 
 const goldenUserId = "golden-user";
 
@@ -103,7 +104,15 @@ async function createHarness() {
   const { entries, logger } = createCapturingLogger();
   const router = createConfiguredApiRouter(
     {},
-    { storage: store, artifacts, github, model, logger, userId: goldenUserId },
+    {
+      storage: store,
+      artifacts,
+      github,
+      model,
+      logger,
+      userId: goldenUserId,
+      auth: testAuth(goldenUserId),
+    },
   );
   if (!router) throw new Error("The composition root did not configure the golden harness");
   return { store, artifacts, github, model, logger, logs: entries, router };
@@ -191,7 +200,7 @@ describe("golden end-to-end investigation", () => {
     const { router, store, model, logs } = harness;
 
     // 1. Authenticate.
-    const session = await router(request("/api/auth/session", { method: "POST", body: "{}" }));
+    const session = await router(request("/api/auth/session", { method: "GET" }));
     expect(session?.status).toBe(200);
     expect(await readJson<{ authenticated: boolean }>(session, "session")).toMatchObject({
       authenticated: true,

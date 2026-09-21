@@ -499,3 +499,34 @@ A record that ends `status=timeout` while SYNTHESIZE logged `success=true` is th
 ### Browser routes and SSR
 
 `GET /` is rendered by the packaged Nitro SSR handler and must return `text/html` with a `<!doctype html>` document. Paths that do not match a TanStack route return the Nitro 404 HTML page, not a Lambda error. `/api` and `/api/*` must keep returning JSON from the API router; if an API response comes back as HTML, the routing bridge is missing from the deployed bundle. Rebuild with `npm run build:aws` and confirm `dist-lambda/index.mjs` contains the runtime `./server/index.mjs` import and that `dist-lambda/server/index.mjs` exists in the package.
+
+### Unstyled page or 404 on /assets/*
+
+If the SSR document renders but its styles and scripts 404, the deployed package has no static handler. Check that `vite.config.aws.ts` still sets `serveStatic: "inline"` and rebuild with `npm run build:aws`; `dist-lambda/server/index.mjs` must then embed the asset manifest, which is visible as the emitted CSS and JS file names inside the bundle. `tests/ssr-static-assets.test.ts` guards both: it asserts the build config, and when `dist-lambda/index.mjs` exists it requests the CSS and JS referenced by the rendered document through the packaged handler and expects `200` with `text/css` / `javascript`. `/api/health` must keep returning JSON; a JSON response proves the request did not reach the SSR renderer.
+
+### Real authentication configuration (Packet 17)
+
+The API resolves the Cognito contract from the environment and reports `AUTH_NOT_CONFIGURED` (503) until all of it is present:
+
+- `REPOSHERLOCK_COGNITO_USER_POOL_ID`
+- `REPOSHERLOCK_COGNITO_CLIENT_ID`
+- `REPOSHERLOCK_COGNITO_REGION` (falls back to `AWS_REGION`)
+- `REPOSHERLOCK_COGNITO_DOMAIN` (hosted UI origin, for example `https://<pool>.auth.ap-south-1.amazoncognito.com`)
+- `REPOSHERLOCK_COGNITO_REDIRECT_URI` (must match the app client callback exactly)
+
+Cognito calls the callback on `GET /api/auth/session`, so the app client callback URL must be `<origin>/api/auth/session`; the API's `POST /api/auth/logout` clears the `reposherlock_session` cookie. `GET /api/auth/session` returns `{ authenticated, configured, user }` and never invents a session: `authenticated` is true only for a verified ID token, and `/api/repositories*` and `/api/investigations*` return 401 `UNAUTHORIZED` without one and 404 for a record another user owns. If protected data returns 401 immediately after signing in, the cookie is missing or the redirect URI does not match the client, and if it returns 503 the environment contract above is incomplete. The investigation pipeline, Bedrock, DynamoDB, IAM and the async worker are unchanged by this phase.
+### Production Cognito callback (required once, console only)
+
+The deploy user `reposherlock-deployer` cannot call `cognito-idp:UpdateUserPoolClient`, so
+CloudFormation cannot move the app client callback off `http://localhost:5173`. The stack keeps that
+callback (`CognitoCallbackBaseUrl`, default `http://localhost:5173`) while `FrontendBaseUrl` now points
+the Lambda's `REPOSHERLOCK_COGNITO_REDIRECT_URI` at the public origin. Until the app client is updated
+the hosted UI answers `HTTP 400` for the production `redirect_uri`.
+
+In the Cognito console, user pool `reposherlock-dev` (`ap-south-1_gmxbUIyfK`), app client
+`reposherlock-dev-web` (`3calip8h2fu96ib07fk4scr44j`): add the allowed callback URL
+`https://tian852vd6.execute-api.ap-south-1.amazonaws.com/api/auth/session` and the allowed sign-out URL
+`https://tian852vd6.execute-api.ap-south-1.amazonaws.com/`, then save. A later `npm run deploy` does not
+revert this because the template's `CognitoCallbackBaseUrl` value is unchanged. Granting the deploy user
+`cognito-idp:UpdateUserPoolClient` instead would let a single `-CognitoCallbackBaseUrl <origin>` deploy
+manage it end to end.

@@ -612,6 +612,20 @@ select:focus-visible {
 .github-button {
   background: var(--foreground) !important;
 }
+.auth-button {
+  width: 100%;
+  margin-top: 14px;
+}
+.cognito-button {
+  background: var(--electric) !important;
+  color: var(--background) !important;
+}
+.provider-note {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-top: 8px;
+}
 .divider {
   height: 35px;
   position: relative;

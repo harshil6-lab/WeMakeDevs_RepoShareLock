@@ -1,7 +1,6 @@
 import { z } from "zod";
-
-const apiBaseUrl =
-  (import.meta.env["VITE_API_BASE_URL"] as string | undefined)?.replace(/\/$/, "") ?? "/api";
+import { authHeaders } from "../auth/client";
+import { apiBaseUrl } from "./base-url";
 
 const repositorySchema = z
   .object({
@@ -85,10 +84,18 @@ async function request<T>(
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
+    // `credentials` sends the httpOnly session cookie; `authHeaders()` adds a
+    // Bearer token only when the client actually holds one.
     const response = await fetch(`${apiBaseUrl}${path}`, {
       ...init,
       signal: controller.signal,
-      headers: { Accept: "application/json", "Content-Type": "application/json", ...init.headers },
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...authHeaders(),
+        ...init.headers,
+      },
     });
     const body = await response.json().catch(() => undefined);
     if (!response.ok) {
@@ -121,8 +128,19 @@ const normalizeList = <T>(value: T[] | { items: T[] }): T[] =>
   Array.isArray(value) ? value : value.items;
 
 export const apiClient = {
-  createSession: () =>
-    request("/auth/session", z.object({ authenticated: z.boolean() }).passthrough(), {
+  getSession: () =>
+    request(
+      "/auth/session",
+      z
+        .object({
+          authenticated: z.boolean(),
+          configured: z.boolean(),
+          user: z.object({ userId: z.string(), email: z.string().optional() }).nullable(),
+        })
+        .passthrough(),
+    ),
+  signOut: () =>
+    request("/auth/logout", z.object({ authenticated: z.boolean() }).passthrough(), {
       method: "POST",
       body: "{}",
     }),

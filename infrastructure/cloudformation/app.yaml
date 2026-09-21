@@ -23,7 +23,17 @@ Parameters:
   FrontendBaseUrl:
     Type: String
     Default: http://localhost:5173
-    Description: Temporary frontend URL used for Cognito callback/logout configuration.
+    Description: >-
+      Public origin the application is served from; the Lambda derives its
+      Cognito redirect URI from it.
+  CognitoCallbackBaseUrl:
+    Type: String
+    Default: http://localhost:5173
+    Description: >-
+      Origin the Cognito app client is allowed to redirect back to. Kept
+      separate from FrontendBaseUrl so the Lambda can be given its public origin
+      without requesting a Cognito client change (the callback is updated in the
+      Cognito console when the deployer lacks cognito-idp:UpdateUserPoolClient).
   InvestigationsTableName:
     Type: String
     Description: Foundation stack output InvestigationsTableName.
@@ -79,6 +89,14 @@ Parameters:
     Description: >-
       Secrets Manager secret holding {"githubToken": "<github token>"}. Populate it
       before deploying this stack; the value is never committed.
+  GitHubOAuthSecretName:
+    Type: String
+    Default: reposherlock/github-oauth
+    AllowedPattern: "^[a-zA-Z0-9/_+=.@-]{1,512}$"
+    Description: >-
+      Secrets Manager secret holding {"clientId": "<github-oauth-client-id>",
+      "clientSecret": "<github-oauth-client-secret>"}. Populated manually before
+      deploying this stack; the value is never committed.
   LogLevel:
     Type: String
     Default: info
@@ -122,6 +140,11 @@ Resources:
           REPOSHERLOCK_BEDROCK_MAX_TOKENS: !Ref BedrockMaxTokens
           REPOSHERLOCK_BEDROCK_ROLE_ARN: !Ref BedrockRoleArn
           REPOSHERLOCK_ASYNC_FUNCTION_NAME: !Sub ${ProjectName}-${EnvironmentName}
+          REPOSHERLOCK_COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+          REPOSHERLOCK_COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
+          REPOSHERLOCK_COGNITO_REGION: !Ref AWS::Region
+          REPOSHERLOCK_COGNITO_DOMAIN: !Sub https://${CognitoUserPoolDomain}.auth.${AWS::Region}.amazoncognito.com
+          REPOSHERLOCK_COGNITO_REDIRECT_URI: !Sub ${FrontendBaseUrl}/api/auth/session
           REPOSHERLOCK_GITHUB_TOKEN: !Sub "{{resolve:secretsmanager:${GitHubSecretName}:SecretString:githubToken}}"
       Tags:
         - Key: Project
@@ -188,11 +211,28 @@ Resources:
         - email
         - profile
       CallbackURLs:
-        - !Sub ${FrontendBaseUrl}/api/auth/session
+        - !Sub ${CognitoCallbackBaseUrl}/api/auth/session
       LogoutURLs:
-        - !Sub ${FrontendBaseUrl}/
+        - !Sub ${CognitoCallbackBaseUrl}/
       SupportedIdentityProviders:
         - COGNITO
+        - GH
+
+  GitHubIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ProviderName: GH
+      ProviderType: OIDC
+      ProviderDetails:
+        client_id: !Sub "{{resolve:secretsmanager:${GitHubOAuthSecretName}:SecretString:clientId}}"
+        client_secret: !Sub "{{resolve:secretsmanager:${GitHubOAuthSecretName}:SecretString:clientSecret}}"
+        authorize_scopes: openid read:user user:email repo
+        issuer: https://github.com/login/oauth
+      AttributeMapping:
+        email: email
+        preferred_username: login
+      ClientId: !Ref CognitoUserPoolClient
 
   MonthlyBudget:
     Type: AWS::Budgets::Budget
