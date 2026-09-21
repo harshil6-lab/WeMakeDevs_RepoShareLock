@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createApiRouter } from "../src/api/router";
+import { testAuth } from "./helpers/auth";
 import { createInvestigationService } from "../src/api/service";
 import { createRepositoryResourceService } from "../src/api/resources";
 import { createInvestigationWorker } from "../src/api/worker";
@@ -22,7 +23,7 @@ describe("API to repository store integration", () => {
   it("persists a queued investigation and serves its lifecycle from storage", async () => {
     const store = createInMemoryRepositoryStore();
     const service = createInvestigationService({ enqueue: () => undefined }, { storage: store });
-    const router = createApiRouter({ service });
+    const router = createApiRouter({ service, auth: testAuth() });
     const created = await router(
       request("/api/investigations", {
         method: "POST",
@@ -58,7 +59,7 @@ describe("API to GitHub integration", () => {
     const store = createInMemoryRepositoryStore();
     const github = createGoldenGitHubClient();
     const resources = createRepositoryResourceService({ storage: store, userId: "user-1", github });
-    const router = createApiRouter({ resources });
+    const router = createApiRouter({ resources, auth: testAuth() });
     const created = await router(
       request("/api/repositories", {
         method: "POST",

@@ -7,6 +7,7 @@ import { createDynamoRepository } from "../storage/dynamo-repository";
 import { createS3ArtifactRepository, type ArtifactRepository } from "../storage/s3-repository";
 import type { RepositoryStore } from "../storage/types";
 import type { BedrockModel } from "../investigation/bedrock";
+import { createAuthContext, type AuthContext } from "../auth/server";
 import { loadConfig } from "./config";
 import { createLogger, type StructuredLogger } from "./logger";
 import { createRepositoryResourceService } from "./resources";
@@ -28,6 +29,7 @@ export type CompositionOverrides = {
   model?: BedrockModel;
   logger?: StructuredLogger;
   userId?: string;
+  auth?: AuthContext;
   /** Injected for tests; the runtime creates its own Lambda client by default. */
   lambdaClient?: Pick<LambdaClient, "send">;
 };
@@ -70,11 +72,12 @@ export type CompositionRuntime = {
   model: BedrockModel;
   logger: StructuredLogger;
   userId: string;
+  auth: AuthContext;
   worker: InvestigationWorker;
   /** Runs ingestion in-process; used by the async Lambda path and local runs. */
   runIndex: (event: { repositoryId: string; userId: string }) => Promise<void>;
   /** Requests indexing, asynchronously when a Lambda dispatch target is configured. */
-  startIndex: (repositoryId: string) => Promise<void>;
+  startIndex: (userId: string, repositoryId: string) => Promise<void>;
 };
 
 /**
@@ -88,7 +91,10 @@ export function createCompositionRuntime(
   overrides: CompositionOverrides = {},
 ): CompositionRuntime | undefined {
   const logger = overrides.logger ?? createLogger(loadConfig(env));
+  // Only the asynchronous/index path uses this fallback owner; HTTP requests
+  // always use the identity verified from the caller's Cognito token.
   const userId = overrides.userId ?? env["REPOSHERLOCK_USER_ID"] ?? "local-user";
+  const auth = overrides.auth ?? createAuthContext({ env });
 
   const tableName = env["REPOSHERLOCK_TABLE_NAME"];
   const bucketName = env["REPOSHERLOCK_BUCKET_NAME"];
@@ -170,10 +176,10 @@ export function createCompositionRuntime(
       : {}),
   });
 
-  const startIndex = async (repositoryId: string) => {
+  const startIndex = async (indexUserId: string, repositoryId: string) => {
     try {
-      if (dispatch) await dispatch({ kind: "index", repositoryId, userId });
-      else await runIndex({ repositoryId, userId });
+      if (dispatch) await dispatch({ kind: "index", repositoryId, userId: indexUserId });
+      else await runIndex({ repositoryId, userId: indexUserId });
     } catch (error) {
       logger.error("repository_index_start_failed", {
         repositoryId,
@@ -189,6 +195,7 @@ export function createCompositionRuntime(
     model,
     logger,
     userId,
+    auth,
     worker,
     runIndex,
     startIndex,
@@ -212,7 +219,6 @@ export function createConfiguredApiRouter(
 
   const resources = createRepositoryResourceService({
     storage: runtime.storage,
-    userId: runtime.userId,
     github: runtime.github,
     startIndex: runtime.startIndex,
   });
@@ -223,6 +229,7 @@ export function createConfiguredApiRouter(
     storage: runtime.storage,
     worker: runtime.worker,
     resources,
+    auth: runtime.auth,
   });
 }
 

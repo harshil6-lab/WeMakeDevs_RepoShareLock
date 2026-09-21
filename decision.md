@@ -126,3 +126,12 @@
 - Prefer Nitro's inline mode over copying `.output-aws/public` next to the bundle and switching to the `"node"` reader. Inline keeps one artifact, adds no packaging step, makes no assumption about where the public directory lands relative to the server bundle, and cannot drift from the bundle that references the asset names.
 - Keep the change inside the AWS-only build config. `vite.config.aws.ts` is used only by `npm run build:aws`, so the local development and preview build keeps its platform default and the routing bridge from Packet 15 is untouched.
 - Do not weaken the routing rules to fix this. `/api` and `/api/*` still run the API router before Nitro is loaded, unknown browser routes still render the Nitro 404 document, and the asynchronous self-invocation branch is unchanged.
+
+## Packet 17 authentication decisions
+
+- Verify Cognito inside the existing Lambda instead of adding an authorizer or a service. `node:crypto` verifies the RS256 ID token against the pool JWKS, so the API needs no new dependency, no API Gateway authorizer and no infrastructure change.
+- Treat the ID token `sub` as the only user id. The previous `REPOSHERLOCK_USER_ID` constant and any browser-supplied `userId` are ignored for authorization, so ownership cannot be spoofed from the client.
+- Return 404, not 403, for a foreign resource. A caller must not learn that a repository, investigation or issue exists under another account.
+- Keep the hosted UI for credentials and never fabricate a session. Sign-in, sign-up and forgot-password redirect to Cognito's hosted UI with PKCE; with no verified token the session endpoint reports `authenticated: false` and protected routes return 401, so there is no mock login path.
+- Report "not configured" explicitly. When the Cognito env contract is absent the API returns 503 `AUTH_NOT_CONFIGURED` instead of a fake `authenticated: true`, so a half-configured deployment cannot look like it has a session.
+- Leave GitHub OAuth out of scope until the pool has a GitHub identity provider. The deployed pool supports `COGNITO` only, so the application does not offer an identity provider it cannot complete.

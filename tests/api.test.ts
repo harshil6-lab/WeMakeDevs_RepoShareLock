@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createApiRouter } from "../src/api/router";
 import { createInvestigationService } from "../src/api/service";
+import { testAuth } from "./helpers/auth";
 
 const request = (url: string, init?: RequestInit) => new Request(`http://localhost${url}`, init);
 
 describe("RepoSherlock API", () => {
   it("validates investigation input", async () => {
-    const response = await createApiRouter()(
+    const response = await createApiRouter({ auth: testAuth() })(
       request("/api/investigations", {
         method: "POST",
         body: JSON.stringify({ repositoryId: "", issueNumber: 0 }),
@@ -29,7 +30,7 @@ describe("RepoSherlock API", () => {
         triggered = true;
       },
     });
-    const router = createApiRouter({ service });
+    const router = createApiRouter({ service, auth: testAuth() });
     const response = await router(
       request("/api/investigations", {
         method: "POST",
@@ -47,7 +48,7 @@ describe("RepoSherlock API", () => {
   });
 
   it("exposes lifecycle status separately from the result read", async () => {
-    const router = createApiRouter();
+    const router = createApiRouter({ auth: testAuth() });
     const response = await router(
       request("/api/investigations", {
         method: "POST",
@@ -66,7 +67,7 @@ describe("RepoSherlock API", () => {
   });
 
   it("returns a stable not-found error", async () => {
-    const response = await createApiRouter()(
+    const response = await createApiRouter({ auth: testAuth() })(
       request("/api/investigations/00000000-0000-0000-0000-000000000000"),
     );
     expect(response?.status).toBe(404);

@@ -68,6 +68,8 @@ type LambdaEvent = AsyncInvocation & ApiGatewayEvent;
 type ApiGatewayResponse = {
   statusCode: number;
   headers: Record<string, string>;
+  /** Carries repeated headers (the session cookie) that a map cannot hold. */
+  multiValueHeaders?: Record<string, string[]>;
   body: string;
   isBase64Encoded: boolean;
 };
@@ -156,19 +158,27 @@ function toFetchRequest(event: ApiGatewayEvent): Request {
 async function toApiGatewayResponse(response: Response): Promise<ApiGatewayResponse> {
   const headers: Record<string, string> = {};
   for (const [key, value] of response.headers.entries()) headers[key] = value;
+  // Set-Cookie cannot be represented in a plain header map, so the session
+  // cookie travels in multiValueHeaders; API Gateway payload 1.0 supports it.
+  const setCookie = response.headers.getSetCookie();
+  const multiValueHeaders = setCookie.length > 0 ? { "set-cookie": setCookie } : undefined;
+  if (setCookie.length > 0) delete headers["set-cookie"];
+  const base = multiValueHeaders ? { multiValueHeaders } : {};
   if (response.status === 204 || response.status === 304)
-    return { statusCode: response.status, headers, body: "", isBase64Encoded: false };
+    return { statusCode: response.status, headers, ...base, body: "", isBase64Encoded: false };
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (isBinaryContentType(response.headers.get("content-type")))
     return {
       statusCode: response.status,
       headers,
+      ...base,
       body: encodeBytesToBase64(bytes),
       isBase64Encoded: true,
     };
   return {
     statusCode: response.status,
     headers,
+    ...base,
     body: new TextDecoder().decode(bytes),
     isBase64Encoded: false,
   };

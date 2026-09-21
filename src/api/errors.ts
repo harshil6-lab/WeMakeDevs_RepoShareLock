@@ -18,6 +18,17 @@ export class NotFoundError extends ApiError {
   }
 }
 
+export class UnauthorizedError extends ApiError {
+  constructor(message = "Authentication is required.") {
+    super(401, "UNAUTHORIZED", message);
+  }
+}
+
+export class AuthNotConfiguredError extends ApiError {
+  constructor(message = "Sign-in is not configured for this deployment yet.") {
+    super(503, "AUTH_NOT_CONFIGURED", message);
+  }
+}
 export function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
   if (error instanceof ZodError)

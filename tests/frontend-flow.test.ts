@@ -21,6 +21,7 @@ import {
   createInMemoryRepositoryStore,
   type GoldenStore,
 } from "./golden/in-memory-store";
+import { testAuth } from "./helpers/auth";
 
 const canonicalStages = [
   "understanding_issue",
@@ -77,6 +78,7 @@ describe("frontend golden flow (real API client and view models)", () => {
         github: createGoldenGitHubClient(),
         model: createRecordingBedrockModel(),
         userId: "golden-user",
+        auth: testAuth("golden-user"),
       },
     );
     if (!router) throw new Error("composition root did not configure the golden harness");
@@ -100,7 +102,7 @@ describe("frontend golden flow (real API client and view models)", () => {
 
   it("drives login, repository, issue, investigate, progress, result, WHY, code and history", async () => {
     // 1. Login.
-    expect(await apiClient.createSession()).toMatchObject({ authenticated: true });
+    expect(await apiClient.getSession()).toMatchObject({ authenticated: true });
 
     // 2. Repository.
     const created = await apiClient.createRepository({

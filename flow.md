@@ -329,3 +329,26 @@ sequenceDiagram
 ```
 
 Nitro's `aws-lambda` preset registers no static handler, so the client assets alone would never be reachable from the Lambda. `serveStatic: "inline"` embeds them into the server bundle and adds the static middleware, which runs before the renderer for every non-API path. The browser therefore loads the same CSS, JS and favicon the build emitted, `/api` and `/api/*` still return through the API router, and neither the API Gateway integration nor the asynchronous invocation path changes.
+
+## Packet 17 authentication and ownership flow
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant B as Browser
+  participant A as API (Lambda)
+  participant C as Cognito hosted UI
+  U->>B: GET /login
+  B->>A: GET /api/auth/login
+  A-->>B: 302 to hosted UI + PKCE verifier cookie
+  B->>C: authorize?code_challenge=...
+  C-->>B: 302 /api/auth/session?code=...
+  B->>A: GET /api/auth/session?code=...
+  A->>C: POST /oauth2/token (code + verifier)
+  C-->>A: ID token (sub)
+  A-->>B: 302 / + httpOnly session cookie
+  B->>A: GET /api/repositories
+  A-->>B: only the repositories owned by the token sub
+```
+
+Identity comes only from the verified ID token. The router reads it through `requireUser()` and hands the `sub` to the resource layer, so a request body or query string carrying a `userId` cannot change whose data is read or written. `requireUser()` answers 503 when Cognito is not configured and 401 when no session is present, and a repository, investigation or evidence record owned by another user is a 404 rather than data.

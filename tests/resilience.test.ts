@@ -5,6 +5,7 @@ import { createInvestigationWorker } from "../src/api/worker";
 import { createDynamoRepository } from "../src/storage/dynamo-repository";
 import { createS3ArtifactRepository } from "../src/storage/s3-repository";
 import { createApiRouter } from "../src/api/router";
+import { testAuth } from "./helpers/auth";
 import { createInvestigationService } from "../src/api/service";
 import { apiClient } from "../src/api/client";
 import type { InvestigationResult } from "../src/investigation/engine";
@@ -187,7 +188,7 @@ describe("storage failure handling", () => {
         },
       },
     );
-    const router = createApiRouter({ service });
+    const router = createApiRouter({ service, auth: testAuth() });
     const response = await router(
       request("/api/investigations/00000000-0000-0000-0000-000000000000"),
     );

@@ -108,7 +108,7 @@ describe("Lambda async dispatch", () => {
       investigationId: investigation.investigationId,
     });
 
-    await runtime!.startIndex(goldenExpectations.repositoryId);
+    await runtime!.startIndex("user-1", goldenExpectations.repositoryId);
     await settle();
     expect(decodePayload(fake.sent[1]!)).toMatchObject({
       marker: asyncEventMarker,
